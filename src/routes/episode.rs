@@ -203,6 +203,7 @@ async fn fetch_stories(
 
     // Process each story
     let mut stories_count = 0;
+    let mut first_error: Option<String> = None;
     for hn_story in hn_stories {
         let mut story: crate::db::models::Story = hn_story.into();
         story.episode_id = episode_id;
@@ -223,6 +224,10 @@ async fn fetch_stories(
                     story.url,
                     e
                 );
+                // Record first error to return later
+                if first_error.is_none() {
+                    first_error = Some(e.to_string());
+                }
                 story.summary = Some("Failed to generate summary".to_string());
                 story.summary_zh = Some("生成摘要失败".to_string());
             }
@@ -233,6 +238,14 @@ async fn fetch_stories(
             continue;
         }
         stories_count += 1;
+    }
+
+    // If all stories failed due to LLM error, return error
+    if stories_count == 0 && first_error.is_some() {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&format!("LLM API error: {}", first_error.unwrap()))),
+        ));
     }
 
     // Get the episode

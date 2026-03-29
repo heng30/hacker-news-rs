@@ -237,9 +237,18 @@
             transition: background 0.2s, color 0.2s;
         }
 
-        .regenerate-btn:hover {
-            background: var(--calendar-has-data);
+        .regenerate-btn:hover:not(:disabled) {
+            background: var(--accent-color);
             color: white;
+        }
+
+        .regenerate-btn:disabled {
+            cursor: default;
+            opacity: 0.7;
+        }
+
+        .regenerate-btn:disabled svg {
+            animation: spin 1s linear infinite;
         }
 
         .story-meta {
@@ -261,11 +270,7 @@
             font-size: 14px;
             color: var(--text-secondary);
             margin-bottom: 5px;
-        }
-
-        .story-summary-zh {
-            font-size: 13px;
-            color: var(--text-muted);
+            line-height: 1.7;
         }
 
         .story.clicked .story-title a {
@@ -1115,7 +1120,7 @@
             const btn = document.getElementById('refreshBtn');
 
             btn.disabled = true;
-            showToast(t('fetching'), 'loading', 0);
+            showToast(t('fetching'), 'loading', 3000);
 
             try {
                 const response = await fetch('/api/fetch', { method: 'POST' });
@@ -1271,7 +1276,7 @@
                             <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
                                 ${isClicked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'}
                             </button>
-                            <button class="regenerate-btn" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}">
+                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M21 12a9 9 0 11-2.636-6.364"/>
                                     <path d="M21 3v6h-6"/>
@@ -1283,8 +1288,7 @@
                         ${s.score} points by ${escapeHtml(s.by)} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
                     </div>
-                    ${s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
-                    ${s.summary_zh ? `<div class="story-summary-zh">${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${s.summary_zh ? `<div class="story-summary">${escapeHtml(s.summary_zh)}</div>` : ''}
                 </div>
             `}).join('');
         }
@@ -1325,7 +1329,7 @@
                             <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
                                 ${isClicked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'}
                             </button>
-                            <button class="regenerate-btn" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}">
+                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M21 12a9 9 0 11-2.636-6.364"/>
                                     <path d="M21 3v6h-6"/>
@@ -1337,8 +1341,7 @@
                         ${s.score} points by ${escapeHtml(s.by)} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
                     </div>
-                    ${s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
-                    ${s.summary_zh ? `<div class="story-summary-zh">${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${s.summary_zh ? `<div class="story-summary">${escapeHtml(s.summary_zh)}</div>` : ''}
                 </div>
             `}).join('');
         }
@@ -1438,13 +1441,14 @@
 
         // Regenerate summary for a story
         async function regenerateSummary(hnId) {
-            showToast(t('regeneratingSummary'), 'loading', 0);
+            const btn = document.getElementById(`regenerate-${hnId}`);
+            if (btn) btn.disabled = true;
+            showToast(t('regeneratingSummary'), 'loading', 3000);
 
             try {
                 const response = await fetch(`/api/story/${hnId}/regenerate`, { method: 'PUT' });
                 const data = await response.json();
                 if (data.success) {
-                    hideToast();
                     showToast(t('summaryRegenerated'), 'success');
                     // Update the story in currentStories
                     const stories = window.currentStories || [];
@@ -1458,12 +1462,12 @@
                     window.currentStories = stories;
                     refreshStoriesList();
                 } else {
-                    hideToast();
                     showToast(data.error || 'Failed to regenerate summary', 'error');
                 }
             } catch (error) {
-                hideToast();
                 showToast('Error: ' + error.message, 'error');
+            } finally {
+                if (btn) btn.disabled = false;
             }
         }
 
