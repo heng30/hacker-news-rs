@@ -9,13 +9,13 @@ use axum::Router;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 use config::AppConfig;
 use db::init_db;
 use routes::AppState;
-use routes::episode::episode_routes;
 use routes::config::config_routes;
+use routes::episode::episode_routes;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -23,8 +23,9 @@ async fn main() -> anyhow::Result<()> {
     // This ensures environment variables are available for all configuration
     dotenvy::dotenv().ok();
 
-    // Initialize logging
+    // Initialize logging (use RUST_LOG env var, default to debug)
     tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug")))
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -68,3 +69,4 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
