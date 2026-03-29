@@ -1,0 +1,226 @@
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::Json,
+    routing::{get, post},
+    Router,
+};
+use serde::Serialize;
+use sqlx::SqlitePool;
+use std::sync::Arc;
+
+use crate::db::{self, models::EpisodeWithStories};
+use crate::hn::api::HnClient;
+use crate::llm::client::LlmClient;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub pool: SqlitePool,
+}
+
+pub fn episode_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/api/episode/latest", get(get_latest_episode))
+        .route("/api/episode/{date}", get(get_episode_by_date))
+        .route("/api/fetch", post(fetch_stories))
+        .route("/api/stories", get(get_all_stories))
+        .route("/api/episodes", get(get_episodes_list))
+}
+
+#[derive(Serialize)]
+struct ApiResponse<T> {
+    success: bool,
+    data: Option<T>,
+    error: Option<String>,
+}
+
+impl<T: Serialize> ApiResponse<T> {
+    fn success(data: T) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
+    }
+
+    fn error(msg: &str) -> Self {
+        Self {
+            success: false,
+            data: None,
+            error: Some(msg.to_string()),
+        }
+    }
+}
+
+async fn get_latest_episode(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<EpisodeWithStories>>, (StatusCode, Json<ApiResponse<EpisodeWithStories>>)> {
+    match db::get_latest_episode(&state.pool).await {
+        Ok(Some(episode)) => {
+            let stories = db::get_stories_by_episode(&state.pool, episode.id)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::error(&e.to_string())),
+                    )
+                })?;
+            Ok(Json(ApiResponse::success(EpisodeWithStories { episode, stories })))
+        }
+        Ok(None) => Err((StatusCode::NOT_FOUND, Json(ApiResponse::error("No episodes found")))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(&e.to_string())))),
+    }
+}
+
+async fn get_episode_by_date(
+    State(state): State<Arc<AppState>>,
+    Path(date): Path<String>,
+) -> Result<Json<ApiResponse<EpisodeWithStories>>, (StatusCode, Json<ApiResponse<EpisodeWithStories>>)> {
+    match db::get_episode_by_date(&state.pool, &date).await {
+        Ok(Some(episode)) => {
+            let stories = db::get_stories_by_episode(&state.pool, episode.id)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::error(&e.to_string())),
+                    )
+                })?;
+            Ok(Json(ApiResponse::success(EpisodeWithStories { episode, stories })))
+        }
+        Ok(None) => Err((StatusCode::NOT_FOUND, Json(ApiResponse::error("Episode not found")))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(&e.to_string())))),
+    }
+}
+
+#[derive(Serialize)]
+struct FetchResponse {
+    episode: crate::db::models::Episode,
+    stories_count: usize,
+}
+
+async fn fetch_stories(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<FetchResponse>>, (StatusCode, Json<ApiResponse<FetchResponse>>)> {
+    // Get configuration with environment variable overrides
+    let config = db::get_config_with_env_overrides(&state.pool)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?;
+
+    if config.api_key.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("API key not configured")),
+        ));
+    }
+
+    // Get today's date
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+    // Create or get episode
+    let episode_id = db::create_episode(&state.pool, &today)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?;
+
+    // Fetch top stories from HN
+    let hn_client = HnClient::new();
+    let top_ids = hn_client.fetch_top_stories().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&format!("Failed to fetch from HN: {}", e))),
+        )
+    })?;
+
+    // Take top N stories based on config
+    let ids: Vec<i64> = top_ids.into_iter().take(config.story_count as usize).collect();
+    let hn_stories = hn_client.fetch_stories(&ids).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&format!("Failed to fetch stories: {}", e))),
+        )
+    })?;
+
+    // Initialize LLM client
+    let llm_client = LlmClient::new(config.api_key, config.api_base_url, config.model);
+
+    // Process each story
+    let mut stories_count = 0;
+    for hn_story in hn_stories {
+        let mut story: crate::db::models::Story = hn_story.into();
+        story.episode_id = episode_id;
+
+        // Generate summary and translate
+        match llm_client.summarize_and_translate(&story.title, story.url.as_deref()).await {
+            Ok((summary, summary_zh)) => {
+                story.summary = Some(summary);
+                story.summary_zh = Some(summary_zh);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to summarize story {}: {}", story.hn_id, e);
+                story.summary = Some("Failed to generate summary".to_string());
+                story.summary_zh = Some("生成摘要失败".to_string());
+            }
+        }
+
+        if let Err(e) = db::save_story(&state.pool, &story).await {
+            tracing::error!("Failed to save story {}: {}", story.hn_id, e);
+            continue;
+        }
+        stories_count += 1;
+    }
+
+    // Get the episode
+    let episode = db::get_episode_by_date(&state.pool, &today)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("Failed to get created episode")),
+            )
+        })?;
+
+    Ok(Json(ApiResponse::success(FetchResponse {
+        episode,
+        stories_count,
+    })))
+}
+
+async fn get_all_stories(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<crate::db::models::Story>>>, (StatusCode, Json<ApiResponse<Vec<crate::db::models::Story>>>)> {
+    let stories = db::get_all_stories(&state.pool).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
+    Ok(Json(ApiResponse::success(stories)))
+}
+
+async fn get_episodes_list(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<crate::db::models::Episode>>>, (StatusCode, Json<ApiResponse<Vec<crate::db::models::Episode>>>)> {
+    let episodes = db::get_episodes(&state.pool).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
+    Ok(Json(ApiResponse::success(episodes)))
+}

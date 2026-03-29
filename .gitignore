@@ -1,0 +1,7 @@
+/target
+
+# Environment variables (may contain sensitive data)
+.env
+
+# Database
+data/

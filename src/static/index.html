@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hacker News RSS Generator</title>
+    <style>
+        :root {
+            --bg-primary: #f6f6ef;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f0f0f0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --text-muted: #828282;
+            --accent-color: #ff6600;
+            --accent-hover: #e55b00;
+            --border-color: #ddd;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+            --calendar-today: #ff6600;
+            --calendar-has-data: #4a90d9;
+            --calendar-hover: #e0e0e0;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #b0b0b0;
+            --text-muted: #888888;
+            --accent-color: #ff7a1a;
+            --accent-hover: #ff8c34;
+            --border-color: #444444;
+            --shadow: 0 2px 8px rgba(0,0,0,0.3);
+            --calendar-today: #ff7a1a;
+            --calendar-has-data: #5ca0e9;
+            --calendar-hover: #4a4a4a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Navigation Bar */
+        .navbar {
+            background: var(--accent-color);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .navbar-center {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .navbar h1 {
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .icon-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: background 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .icon-btn:focus {
+            outline: 2px solid rgba(255,255,255,0.5);
+            outline-offset: 2px;
+        }
+
+        .fetch-btn {
+            background: white;
+            color: var(--accent-color);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .fetch-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .fetch-btn:active {
+            transform: scale(0.98);
+        }
+
+        .fetch-btn:disabled {
+            background: #ccc;
+            color: #888;
+            cursor: not-allowed;
+        }
+
+        /* Main Layout */
+        .main-container {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* Content Area */
+        .content-area {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .episode-header {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin-bottom: 15px;
+            box-shadow: var(--shadow);
+        }
+
+        .episode-header h2 {
+            font-size: 16px;
+            color: var(--text-secondary);
+        }
+
+        .episode-header .date {
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .stories-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .story {
+            border-bottom: 1px solid var(--border-color);
+            padding: 15px 20px;
+        }
+
+        .story:last-child {
+            border-bottom: none;
+        }
+
+        .story-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .story-title a {
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .story-title a:hover {
+            text-decoration: underline;
+            color: var(--accent-color);
+        }
+
+        .story-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .story-meta a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+
+        .story-meta a:hover {
+            text-decoration: underline;
+        }
+
+        .story-summary {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .story-summary-zh {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Calendar Sidebar */
+        .calendar-sidebar {
+            width: 280px;
+            flex-shrink: 0;
+        }
+
+        .calendar-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 70px;
+        }
+
+        .calendar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .calendar-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .calendar-nav {
+            background: none;
+            border: none;
+            color: var(--accent-color);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .calendar-nav:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+
+        .calendar-day-header {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 5px 0;
+        }
+
+        .calendar-day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .calendar-day:hover {
+            background: var(--calendar-hover);
+        }
+
+        .calendar-day.other-month {
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+
+        .calendar-day.today {
+            background: var(--calendar-today);
+            color: white;
+            font-weight: 600;
+        }
+
+        .calendar-day.has-data {
+            background: var(--calendar-has-data);
+            color: white;
+        }
+
+        .calendar-day.selected {
+            box-shadow: 0 0 0 2px var(--accent-color);
+        }
+
+        .calendar-day.empty {
+            cursor: default;
+        }
+
+        .calendar-day.empty:hover {
+            background: transparent;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 24px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--text-muted);
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 14px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .form-group input:disabled {
+            background: var(--bg-tertiary);
+            cursor: not-allowed;
+        }
+
+        .env-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .env-badge .check {
+            color: #4caf50;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 24px;
+        }
+
+        .btn-primary {
+            flex: 1;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            flex: 1;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        /* Status Messages */
+        .status-bar {
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .status-bar.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+
+        .status-bar.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+
+        .status-bar.loading {
+            background: #fff3cd;
+            color: #856404;
+            display: block;
+        }
+
+        [data-theme="dark"] .status-bar.success {
+            background: #1e4620;
+            color: #a8e6ab;
+        }
+
+        [data-theme="dark"] .status-bar.error {
+            background: #4a1e1e;
+            color: #f8a8a8;
+        }
+
+        [data-theme="dark"] .status-bar.loading {
+            background: #4a3d1e;
+            color: #ffe082;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+
+            .calendar-sidebar {
+                width: 100%;
+            }
+
+            .calendar-card {
+                position: static;
+            }
+
+            .navbar h1 {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="navbar-left">
+            <button class="icon-btn" id="themeToggle" title="Toggle theme">
+                <span id="themeIcon">🌙</span>
+            </button>
+            <h1>📰 Hacker News RSS</h1>
+        </div>
+        <div class="navbar-center">
+            <button class="fetch-btn" id="fetchBtn" onclick="fetchStories()">
+                <span id="fetchBtnText">Fetch Stories</span>
+            </button>
+        </div>
+        <div class="navbar-right">
+            <button class="icon-btn" id="configBtn" title="Settings">
+                ⚙️
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Content Area -->
+        <div class="content-area">
+            <div id="statusBar" class="status-bar"></div>
+
+            <div class="episode-header">
+                <h2>Episode: <span class="date" id="episodeDate">-</span></h2>
+            </div>
+
+            <div class="stories-container" id="storiesContainer">
+                <div class="empty-state">
+                    <div class="icon">📰</div>
+                    <p>No episode loaded</p>
+                    <p style="font-size: 13px; margin-top: 8px;">Click "Fetch Stories" or select a date from the calendar</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar Sidebar -->
+        <aside class="calendar-sidebar">
+            <div class="calendar-card">
+                <div class="calendar-header">
+                    <button class="calendar-nav" onclick="changeMonth(-1)">◀</button>
+                    <h3 id="calendarTitle">March 2026</h3>
+                    <button class="calendar-nav" onclick="changeMonth(1)">▶</button>
+                </div>
+                <div class="calendar-grid" id="calendarGrid">
+                    <!-- Calendar will be generated here -->
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Config Modal -->
+    <div class="modal-overlay" id="configModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>⚙️ Configuration</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+
+            <div class="form-group">
+                <label for="storyCount">Number of Stories</label>
+                <div id="storyCountContainer">
+                    <input type="number" id="storyCount" min="1" max="100" value="30">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="apiBaseUrl">API Base URL</label>
+                <div id="apiBaseUrlContainer">
+                    <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="model">Model</label>
+                <div id="modelContainer">
+                    <input type="text" id="model" placeholder="gpt-4o-mini">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>API Key</label>
+                <div id="apiKeyContainer">
+                    <input type="password" id="apiKey" placeholder="Enter your API key">
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveConfig()">Save</button>
+            </div>
+            <div id="configStatus" style="margin-top: 15px; font-size: 13px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentMonth = new Date();
+        let selectedDate = null;
+        let episodesWithDates = new Set();
+
+        // Theme Management
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeIcon(savedTheme);
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeIcon(next);
+        }
+
+        function updateThemeIcon(theme) {
+            const icon = document.getElementById('themeIcon');
+            icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+
+        // Modal Management
+        function openModal() {
+            document.getElementById('configModal').classList.add('active');
+            loadConfig();
+        }
+
+        function closeModal() {
+            document.getElementById('configModal').classList.remove('active');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initTheme();
+
+            document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+            document.getElementById('configBtn').addEventListener('click', openModal);
+
+            document.getElementById('configModal').addEventListener('click', (e) => {
+                if (e.target.id === 'configModal') closeModal();
+            });
+
+            await loadEpisodes();
+            await loadLatestEpisode();
+            renderCalendar();
+        });
+
+        // API Functions
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                if (data.success) {
+                    const config = data.data;
+
+                    // Story Count
+                    const storyCountInput = document.getElementById('storyCount');
+                    const storyCountContainer = document.getElementById('storyCountContainer');
+                    storyCountInput.value = config.story_count;
+                    if (config.story_count_from_env) {
+                        storyCountInput.disabled = true;
+                        storyCountContainer.innerHTML = `
+                            <div class="env-badge">
+                                <span class="check">✓</span>
+                                <span>${config.story_count} (set via environment)</span>
+                            </div>
+                        `;
+                    }
+
+                    // API Base URL
+                    const apiBaseUrlInput = document.getElementById('apiBaseUrl');
+                    const apiBaseUrlContainer = document.getElementById('apiBaseUrlContainer');
+                    apiBaseUrlInput.value = config.api_base_url;
+                    if (config.api_base_url_from_env) {
+                        apiBaseUrlInput.disabled = true;
+                        apiBaseUrlContainer.innerHTML = `
+                            <div class="env-badge">
+                                <span class="check">✓</span>
+                                <span>${config.api_base_url || 'default'} (set via environment)</span>
+                            </div>
+                        `;
+                    }
+
+                    // Model
+                    const modelInput = document.getElementById('model');
+                    const modelContainer = document.getElementById('modelContainer');
+                    modelInput.value = config.model;
+                    if (config.model_from_env) {
+                        modelInput.disabled = true;
+                        modelContainer.innerHTML = `
+                            <div class="env-badge">
+                                <span class="check">✓</span>
+                                <span>${config.model} (set via environment)</span>
+                            </div>
+                        `;
+                    }
+
+                    // API Key - special handling
+                    const apiKeyContainer = document.getElementById('apiKeyContainer');
+                    if (config.api_key_from_env) {
+                        apiKeyContainer.innerHTML = `
+                            <div class="env-badge">
+                                <span class="check">✓</span>
+                                <span>Set via environment variable</span>
+                            </div>
+                        `;
+                    } else {
+                        apiKeyContainer.innerHTML = `
+                            <input type="password" id="apiKey" placeholder="Enter your API key">
+                        `;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+
+        async function saveConfig() {
+            const statusEl = document.getElementById('configStatus');
+            statusEl.textContent = 'Saving...';
+            statusEl.style.color = 'var(--text-secondary)';
+
+            const config = {
+                story_count: parseInt(document.getElementById('storyCount')?.value) || null,
+                api_base_url: document.getElementById('apiBaseUrl')?.value || null,
+                model: document.getElementById('model')?.value || null,
+                api_key: document.getElementById('apiKey')?.value || null
+            };
+
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    statusEl.textContent = '✓ Configuration saved!';
+                    statusEl.style.color = '#4caf50';
+                    setTimeout(() => {
+                        closeModal();
+                        statusEl.textContent = '';
+                    }, 1000);
+                } else {
+                    statusEl.textContent = data.error || 'Failed to save configuration';
+                    statusEl.style.color = '#f44336';
+                }
+            } catch (error) {
+                statusEl.textContent = 'Error: ' + error.message;
+                statusEl.style.color = '#f44336';
+            }
+        }
+
+        async function fetchStories() {
+            const btn = document.getElementById('fetchBtn');
+            const btnText = document.getElementById('fetchBtnText');
+            const statusEl = document.getElementById('statusBar');
+
+            btn.disabled = true;
+            btnText.innerHTML = '<span class="loading-spinner"></span>Fetching...';
+            statusEl.className = 'status-bar loading';
+            statusEl.textContent = 'Fetching stories from Hacker News and generating summaries...';
+
+            try {
+                const response = await fetch('/api/fetch', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    statusEl.className = 'status-bar success';
+                    statusEl.textContent = `✓ Fetched ${data.data.stories_count} stories for ${data.data.episode.date}`;
+                    await loadEpisodes();
+                    await loadLatestEpisode();
+                } else {
+                    statusEl.className = 'status-bar error';
+                    statusEl.textContent = data.error || 'Failed to fetch stories';
+                }
+            } catch (error) {
+                statusEl.className = 'status-bar error';
+                statusEl.textContent = 'Error: ' + error.message;
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Fetch Stories';
+            }
+        }
+
+        async function loadEpisodes() {
+            try {
+                const response = await fetch('/api/episodes');
+                const data = await response.json();
+                if (data.success) {
+                    episodesWithDates = new Set(data.data.map(ep => ep.date));
+                    renderCalendar();
+                }
+            } catch (error) {
+                console.error('Failed to load episodes:', error);
+            }
+        }
+
+        async function loadLatestEpisode() {
+            const container = document.getElementById('storiesContainer');
+
+            try {
+                const response = await fetch('/api/episode/latest');
+                const data = await response.json();
+                if (data.success) {
+                    renderEpisode(data.data);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon">📰</div>
+                            <p>No episodes found</p>
+                            <p style="font-size: 13px; margin-top: 8px;">Click "Fetch Stories" to create one</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">⚠️</div>
+                        <p>Error loading episode</p>
+                        <p style="font-size: 13px; margin-top: 8px;">${escapeHtml(error.message)}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadEpisode(date) {
+            const container = document.getElementById('storiesContainer');
+            container.innerHTML = '<div class="empty-state"><div class="loading-spinner"></div><p>Loading...</p></div>';
+
+            try {
+                const response = await fetch(`/api/episode/${date}`);
+                const data = await response.json();
+                if (data.success) {
+                    renderEpisode(data.data);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon">📭</div>
+                            <p>Episode not found</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">⚠️</div>
+                        <p>Error loading episode</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderEpisode(episodeData) {
+            const container = document.getElementById('storiesContainer');
+            const episode = episodeData.episode;
+            const stories = episodeData.stories;
+
+            document.getElementById('episodeDate').textContent = episode.date;
+            selectedDate = episode.date;
+
+            if (!stories || stories.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📭</div>
+                        <p>No stories in this episode</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = stories.map((s, i) => `
+                <div class="story">
+                    <div class="story-title">
+                        <a href="${escapeHtml(s.url || '#')}" target="_blank">${i + 1}. ${escapeHtml(s.title)}</a>
+                    </div>
+                    <div class="story-meta">
+                        ${s.score} points by ${escapeHtml(s.by)} |
+                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
+                    </div>
+                    ${s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
+                    ${s.summary_zh ? `<div class="story-summary-zh">${escapeHtml(s.summary_zh)}</div>` : ''}
+                </div>
+            `).join('');
+
+            renderCalendar();
+        }
+
+        // Calendar Functions
+        function renderCalendar() {
+            const grid = document.getElementById('calendarGrid');
+            const title = document.getElementById('calendarTitle');
+
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+
+            title.textContent = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            const dayHeaders = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+            let html = dayHeaders.map(d => `<div class="calendar-day-header">${d}</div>`).join('');
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Days from previous month
+            const startDayOfWeek = firstDay.getDay();
+            const prevMonthLastDay = new Date(year, month, 0).getDate();
+            for (let i = startDayOfWeek - 1; i >= 0; i--) {
+                html += `<div class="calendar-day other-month empty">${prevMonthLastDay - i}</div>`;
+            }
+
+            // Days of current month
+            for (let day = 1; day <= lastDay.getDate(); day++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayDate = new Date(year, month, day);
+
+                let classes = 'calendar-day';
+                if (dayDate.getTime() === today.getTime()) {
+                    classes += ' today';
+                }
+                if (episodesWithDates.has(dateStr)) {
+                    classes += ' has-data';
+                }
+                if (selectedDate === dateStr) {
+                    classes += ' selected';
+                }
+
+                html += `<div class="${classes}" onclick="selectDate('${dateStr}')">${day}</div>`;
+            }
+
+            // Days from next month
+            const endDayOfWeek = lastDay.getDay();
+            for (let i = 1; i < 7 - endDayOfWeek; i++) {
+                html += `<div class="calendar-day other-month empty">${i}</div>`;
+            }
+
+            grid.innerHTML = html;
+        }
+
+        function changeMonth(delta) {
+            currentMonth.setMonth(currentMonth.getMonth() + delta);
+            renderCalendar();
+        }
+
+        function selectDate(dateStr) {
+            if (episodesWithDates.has(dateStr)) {
+                loadEpisode(dateStr);
+            }
+        }
+
+        // Utility
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
