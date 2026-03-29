@@ -11,6 +11,53 @@
 - 可配置的故事数量、LLM 模型和 API 设置
 - 按期刊组织内容（每日快照）
 
+## Hacker News API
+
+本项目使用官方 Hacker News Firebase API：
+
+| 接口 | 说明 |
+|------|------|
+| `GET https://hacker-news.firebaseio.com/v0/topstories.json` | 返回最多 500 个热门故事 ID |
+| `GET https://hacker-news.firebaseio.com/v0/item/{id}.json` | 返回故事详情（title, url, by, score, time） |
+
+### 故事数据结构
+
+```json
+{
+  "id": 12345,
+  "title": "Story Title",
+  "url": "https://example.com",
+  "by": "author_username",
+  "score": 100,
+  "time": 1234567890
+}
+```
+
+API 参考：https://github.com/HackerNews/API
+
+## 摘要生成流程
+
+LLM 仅基于故事元数据生成摘要，不抓取文章内容：
+
+```
+Hacker News API → 故事元数据 (title, url) → LLM → 摘要
+```
+
+### LLM 输入格式
+
+发送给 LLM 的提示词仅包含标题和 URL：
+
+```
+Title: {story_title}
+URL: {story_url}
+```
+
+LLM 仅根据标题上下文生成 500-600 字的中文摘要（或 200-300 词的英文摘要）。
+
+### 局限性
+
+由于不抓取文章内容，摘要质量取决于标题的信息量。如需更高质量的摘要，可考虑在后续版本中添加内容抓取功能。
+
 ## API 接口
 
 | 方法 | 路径 | 说明 |
@@ -28,17 +75,17 @@
 
 ## 配置说明
 
-通过环境变量配置（前缀：`HACKER_NEW_`）：
+通过环境变量配置（前缀：`HACKER_NEWS_`）：
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `HACKER_NEW_DATABASE_URL` | SQLite 数据库 URL | `sqlite:data/hacker_news.db?mode=rwc` |
-| `HACKER_NEW_PORT` | 服务端口 | `3000` |
-| `HACKER_NEW_OPENAI_API_KEY` | LLM API 密钥 | （生成摘要必需） |
-| `HACKER_NEW_OPENAI_BASE_URL` | LLM API 基础 URL | `https://api.deepseek.com/v1` |
-| `HACKER_NEW_MODEL` | LLM 模型名称 | `deepseek-chat` |
-| `HACKER_NEW_STORY_COUNT` | 每次抓取故事数量 | `10` |
-| `HACKER_NEW_AUTO_UPDATE_INTERVAL` | 自动更新间隔（分钟） | `0`（禁用） |
+| `HACKER_NEWS_DATABASE_URL` | SQLite 数据库 URL | `sqlite:data/hacker_news.db?mode=rwc` |
+| `HACKER_NEWS_PORT` | 服务端口 | `3000` |
+| `HACKER_NEWS_OPENAI_API_KEY` | LLM API 密钥 | （生成摘要必需） |
+| `HACKER_NEWS_OPENAI_BASE_URL` | LLM API 基础 URL | `https://api.deepseek.com/v1` |
+| `HACKER_NEWS_MODEL` | LLM 模型名称 | `deepseek-chat` |
+| `HACKER_NEWS_STORY_COUNT` | 每次抓取故事数量 | `10` |
+| `HACKER_NEWS_AUTO_UPDATE_INTERVAL` | 自动更新间隔（分钟） | `0`（禁用） |
 
 ## 快速开始
 
@@ -50,9 +97,9 @@
 
 2. 创建 `.env` 文件：
    ```bash
-   HACKER_NEW_OPENAI_API_KEY=你的API密钥
-   HACKER_NEW_OPENAI_BASE_URL=https://api.deepseek.com/v1
-   HACKER_NEW_MODEL=deepseek-chat
+   HACKER_NEWS_OPENAI_API_KEY=你的API密钥
+   HACKER_NEWS_OPENAI_BASE_URL=https://api.deepseek.com/v1
+   HACKER_NEWS_MODEL=deepseek-chat
    ```
 
 3. 构建并运行：

@@ -17,6 +17,7 @@ description = "Hacker News RSS Generator with AI Summaries"
 log = "0.4"
 axum = "0.8"
 sqlx = "0.8"
+htmd = "0.5"
 anyhow = "1.0"
 chrono = "0.4"
 tracing = "0.1"
@@ -33,13 +34,14 @@ serde = { version = "1.0", features = ["derive"] }
 reqwest = { version = "0.13", features = ["json", "stream"] }
 
 [package]
-name = "hacker-new-rs"
+name = "hacker-news-rs"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [dependencies]
+htmd.workspace = true
 axum.workspace = true
 tokio.workspace = true
 serde.workspace = true
@@ -55,4 +57,3 @@ tower-http = { workspace = true, features = ["cors", "fs"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 
 bot = { path = "lib/bot" }
-

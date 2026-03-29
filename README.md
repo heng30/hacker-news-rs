@@ -11,6 +11,53 @@ A Rust-based web service that fetches top stories from Hacker News and generates
 - Configurable story count, LLM model, and API settings
 - Episode-based organization (daily snapshots)
 
+## Hacker News API
+
+This project uses the official Hacker News Firebase API:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET https://hacker-news.firebaseio.com/v0/topstories.json` | Returns array of up to 500 top story IDs |
+| `GET https://hacker-news.firebaseio.com/v0/item/{id}.json` | Returns story details (title, url, by, score, time) |
+
+### Story Data Structure
+
+```json
+{
+  "id": 12345,
+  "title": "Story Title",
+  "url": "https://example.com",
+  "by": "author_username",
+  "score": 100,
+  "time": 1234567890
+}
+```
+
+API reference: https://github.com/HackerNews/API
+
+## Summary Generation Flow
+
+The LLM generates summaries based on story metadata only, without fetching article content:
+
+```
+Hacker News API → Story Metadata (title, url) → LLM → Summary
+```
+
+### LLM Input Format
+
+The prompt sent to the LLM includes only the title and URL:
+
+```
+Title: {story_title}
+URL: {story_url}
+```
+
+The LLM generates a 500-600 character Chinese summary (or 200-300 word English summary) based solely on the title context.
+
+### Limitation
+
+Since article content is not fetched, the summary quality depends on how informative the title is. For better summaries, consider adding content scraping in future versions.
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -28,17 +75,17 @@ A Rust-based web service that fetches top stories from Hacker News and generates
 
 ## Configuration
 
-Configure via environment variables (prefix: `HACKER_NEW_`):
+Configure via environment variables (prefix: `HACKER_NEWS_`):
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `HACKER_NEW_DATABASE_URL` | SQLite database URL | `sqlite:data/hacker_news.db?mode=rwc` |
-| `HACKER_NEW_PORT` | Server port | `3000` |
-| `HACKER_NEW_OPENAI_API_KEY` | LLM API key | (required for summaries) |
-| `HACKER_NEW_OPENAI_BASE_URL` | LLM API base URL | `https://api.deepseek.com/v1` |
-| `HACKER_NEW_MODEL` | LLM model name | `deepseek-chat` |
-| `HACKER_NEW_STORY_COUNT` | Number of stories per fetch | `10` |
-| `HACKER_NEW_AUTO_UPDATE_INTERVAL` | Auto-update interval (minutes) | `0` (disabled) |
+| `HACKER_NEWS_DATABASE_URL` | SQLite database URL | `sqlite:data/hacker_news.db?mode=rwc` |
+| `HACKER_NEWS_PORT` | Server port | `3000` |
+| `HACKER_NEWS_OPENAI_API_KEY` | LLM API key | (required for summaries) |
+| `HACKER_NEWS_OPENAI_BASE_URL` | LLM API base URL | `https://api.deepseek.com/v1` |
+| `HACKER_NEWS_MODEL` | LLM model name | `deepseek-chat` |
+| `HACKER_NEWS_STORY_COUNT` | Number of stories per fetch | `10` |
+| `HACKER_NEWS_AUTO_UPDATE_INTERVAL` | Auto-update interval (minutes) | `0` (disabled) |
 
 ## Quick Start
 
@@ -50,9 +97,9 @@ Configure via environment variables (prefix: `HACKER_NEW_`):
 
 2. Create a `.env` file:
    ```bash
-   HACKER_NEW_OPENAI_API_KEY=your_api_key_here
-   HACKER_NEW_OPENAI_BASE_URL=https://api.deepseek.com/v1
-   HACKER_NEW_MODEL=deepseek-chat
+   HACKER_NEWS_OPENAI_API_KEY=your_api_key_here
+   HACKER_NEWS_OPENAI_BASE_URL=https://api.deepseek.com/v1
+   HACKER_NEWS_MODEL=deepseek-chat
    ```
 
 3. Build and run:

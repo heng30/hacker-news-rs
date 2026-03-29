@@ -1,14 +1,14 @@
 use std::env;
 
 /// Environment variable names for configuration
-/// All environment variables are prefixed with HACKER_NEW_ for consistency
-pub const ENV_OPENAI_API_KEY: &str = "HACKER_NEW_OPENAI_API_KEY";
-pub const ENV_OPENAI_BASE_URL: &str = "HACKER_NEW_OPENAI_BASE_URL";
-pub const ENV_MODEL: &str = "HACKER_NEW_MODEL";
-pub const ENV_STORY_COUNT: &str = "HACKER_NEW_STORY_COUNT";
-pub const ENV_DATABASE_URL: &str = "HACKER_NEW_DATABASE_URL";
-pub const ENV_PORT: &str = "HACKER_NEW_PORT";
-pub const ENV_AUTO_UPDATE_INTERVAL: &str = "HACKER_NEW_AUTO_UPDATE_INTERVAL";
+/// All environment variables are prefixed with HACKER_NEWS_ for consistency
+pub const ENV_OPENAI_API_KEY: &str = "HACKER_NEWS_OPENAI_API_KEY";
+pub const ENV_OPENAI_BASE_URL: &str = "HACKER_NEWS_OPENAI_BASE_URL";
+pub const ENV_MODEL: &str = "HACKER_NEWS_MODEL";
+pub const ENV_STORY_COUNT: &str = "HACKER_NEWS_STORY_COUNT";
+pub const ENV_DATABASE_URL: &str = "HACKER_NEWS_DATABASE_URL";
+pub const ENV_PORT: &str = "HACKER_NEWS_PORT";
+pub const ENV_AUTO_UPDATE_INTERVAL: &str = "HACKER_NEWS_AUTO_UPDATE_INTERVAL";
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {

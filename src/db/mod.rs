@@ -87,10 +87,10 @@ pub async fn get_config(pool: &SqlitePool) -> Result<Config> {
 
 /// Get configuration with environment variable overrides.
 /// Environment variables take precedence over database values for:
-/// - HACKER_NEW_OPENAI_API_KEY (always from env if set, never stored in DB)
-/// - HACKER_NEW_OPENAI_BASE_URL (overrides DB if set)
-/// - HACKER_NEW_MODEL (overrides DB if set)
-/// - HACKER_NEW_STORY_COUNT (overrides DB if set)
+/// - HACKER_NEWS_OPENAI_API_KEY (always from env if set, never stored in DB)
+/// - HACKER_NEWS_OPENAI_BASE_URL (overrides DB if set)
+/// - HACKER_NEWS_MODEL (overrides DB if set)
+/// - HACKER_NEWS_STORY_COUNT (overrides DB if set)
 pub async fn get_config_with_env_overrides(pool: &SqlitePool) -> Result<Config> {
     let config = get_config(pool).await?;
 

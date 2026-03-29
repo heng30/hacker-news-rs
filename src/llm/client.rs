@@ -26,9 +26,18 @@ impl LlmClient {
         url: Option<&str>,
         lang: &str,
     ) -> Result<(Option<String>, Option<String>)> {
-        let context = match url {
-            Some(u) => format!("Title: {}\nURL: {}", title, u),
-            None => format!("Title: {}", title),
+        // 获取 URL 内容
+        let content = match url {
+            Some(u) => crate::fetcher::content::fetch_url_content(u).await?,
+            None => None,
+        };
+
+        let context = match content {
+            Some(c) => format!("Title: {}\n\nContent:\n{}", title, c),
+            None => match url {
+                Some(u) => format!("Title: {}\nURL: {}", title, u),
+                None => format!("Title: {}", title),
+            },
         };
 
         if lang == "en" {

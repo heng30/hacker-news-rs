@@ -1,5 +1,6 @@
 mod config;
 mod db;
+mod fetcher;
 mod hn;
 mod llm;
 mod routes;
