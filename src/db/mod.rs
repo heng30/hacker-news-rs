@@ -252,19 +252,31 @@ pub async fn get_story_by_hn_id(pool: &SqlitePool, hn_id: i64) -> Result<Option<
     Ok(story)
 }
 
-/// Update summary for a story
-pub async fn update_story_summary(pool: &SqlitePool, story_id: i64, summary: &str, summary_zh: &str) -> Result<()> {
-    sqlx::query(
-        r#"
-        UPDATE stories SET summary = ?1, summary_zh = ?2, fetched_at = datetime('now')
-        WHERE id = ?3
-        "#,
-    )
-    .bind(summary)
-    .bind(summary_zh)
-    .bind(story_id)
-    .execute(pool)
-    .await?;
+/// Update summary for a specific language only, preserving the other language's summary
+pub async fn update_story_summary_by_lang(pool: &SqlitePool, story_id: i64, lang: &str, summary: &str) -> Result<()> {
+    if lang == "en" {
+        sqlx::query(
+            r#"
+            UPDATE stories SET summary = ?1, fetched_at = datetime('now')
+            WHERE id = ?2
+            "#,
+        )
+        .bind(summary)
+        .bind(story_id)
+        .execute(pool)
+        .await?;
+    } else {
+        sqlx::query(
+            r#"
+            UPDATE stories SET summary_zh = ?1, fetched_at = datetime('now')
+            WHERE id = ?2
+            "#,
+        )
+        .bind(summary)
+        .bind(story_id)
+        .execute(pool)
+        .await?;
+    }
 
     Ok(())
 }

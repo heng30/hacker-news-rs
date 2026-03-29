@@ -98,6 +98,11 @@ async fn get_episode_by_date(
     }
 }
 
+#[derive(Deserialize)]
+struct FetchRequest {
+    lang: Option<String>,
+}
+
 #[derive(Serialize)]
 struct FetchResponse {
     episode: crate::db::models::Episode,
@@ -106,6 +111,7 @@ struct FetchResponse {
 
 async fn fetch_stories(
     State(state): State<Arc<AppState>>,
+    Json(payload): Json<FetchRequest>,
 ) -> Result<Json<ApiResponse<FetchResponse>>, (StatusCode, Json<ApiResponse<FetchResponse>>)> {
     // Get configuration with environment variable overrides
     let config = db::get_config_with_env_overrides(&state.pool)
@@ -201,6 +207,9 @@ async fn fetch_stories(
     tracing::info!("Initializing LLM client with base_url: {}, model: {}", config.api_base_url, config.model);
     let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
 
+    // Determine language for summary generation
+    let lang = payload.lang.as_deref().unwrap_or("zh");
+
     // Process each story
     let mut stories_count = 0;
     let mut first_error: Option<String> = None;
@@ -208,13 +217,13 @@ async fn fetch_stories(
         let mut story: crate::db::models::Story = hn_story.into();
         story.episode_id = episode_id;
 
-        // Generate summary and translate
-        tracing::info!("Generating summary for story {}: {}", story.hn_id, story.title);
-        match llm_client.summarize_and_translate(&story.title, story.url.as_deref()).await {
+        // Generate summary based on language preference
+        tracing::info!("Generating {} summary for story {}: {}", lang, story.hn_id, story.title);
+        match llm_client.summarize(&story.title, story.url.as_deref(), lang).await {
             Ok((summary, summary_zh)) => {
                 tracing::info!("Successfully generated summary for story {}", story.hn_id);
-                story.summary = Some(summary);
-                story.summary_zh = Some(summary_zh);
+                story.summary = summary;
+                story.summary_zh = summary_zh;
             }
             Err(e) => {
                 tracing::error!(
@@ -228,8 +237,11 @@ async fn fetch_stories(
                 if first_error.is_none() {
                     first_error = Some(e.to_string());
                 }
-                story.summary = Some("Failed to generate summary".to_string());
-                story.summary_zh = Some("生成摘要失败".to_string());
+                if lang == "en" {
+                    story.summary = Some("Failed to generate summary".to_string());
+                } else {
+                    story.summary_zh = Some("生成摘要失败".to_string());
+                }
             }
         }
 
@@ -357,10 +369,16 @@ struct RegenerateResponse {
     story: crate::db::models::Story,
 }
 
+#[derive(Deserialize)]
+struct RegenerateRequest {
+    lang: Option<String>,
+}
+
 /// Regenerate summary for a specific story
 async fn regenerate_story_summary(
     State(state): State<Arc<AppState>>,
     Path(hn_id): Path<i64>,
+    Json(payload): Json<RegenerateRequest>,
 ) -> Result<Json<ApiResponse<RegenerateResponse>>, (StatusCode, Json<ApiResponse<RegenerateResponse>>)> {
     // Get configuration
     let config = db::get_config_with_env_overrides(&state.pool).await.map_err(|e| {
@@ -385,15 +403,18 @@ async fn regenerate_story_summary(
         )
     })?;
 
+    // Determine language for summary generation
+    let lang = payload.lang.as_deref().unwrap_or("zh");
+
     match story {
         Some(s) => {
             // Initialize LLM client
             let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
 
-            // Regenerate summary
-            tracing::info!("Regenerating summary for story {}: {}", s.hn_id, s.title);
+            // Regenerate summary based on language preference
+            tracing::info!("Regenerating {} summary for story {}: {}", lang, s.hn_id, s.title);
             let (summary, summary_zh) = llm_client
-                .summarize_and_translate(&s.title, s.url.as_deref())
+                .summarize(&s.title, s.url.as_deref(), lang)
                 .await
                 .map_err(|e| {
                     (
@@ -402,13 +423,22 @@ async fn regenerate_story_summary(
                     )
                 })?;
 
-            // Update story in database
-            db::update_story_summary(&state.pool, s.id, &summary, &summary_zh).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::error(&e.to_string())),
-                )
-            })?;
+            // Update story in database - use the appropriate function based on language
+            if lang == "en" {
+                db::update_story_summary_by_lang(&state.pool, s.id, lang, &summary.unwrap_or_default()).await.map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::error(&e.to_string())),
+                    )
+                })?;
+            } else {
+                db::update_story_summary_by_lang(&state.pool, s.id, lang, &summary_zh.unwrap_or_default()).await.map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::error(&e.to_string())),
+                    )
+                })?;
+            }
 
             // Return updated story
             let updated_story = db::get_story_by_hn_id(&state.pool, hn_id).await.map_err(|e| {

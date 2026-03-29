@@ -17,28 +17,43 @@ impl LlmClient {
         }
     }
 
-    /// Generate Chinese summary only
-    pub async fn summarize_and_translate(
+    /// Generate summary based on language preference
+    /// lang = "en" -> generates English summary only
+    /// lang = "zh" -> generates Chinese summary only
+    pub async fn summarize(
         &self,
         title: &str,
         url: Option<&str>,
-    ) -> Result<(String, String)> {
+        lang: &str,
+    ) -> Result<(Option<String>, Option<String>)> {
         let context = match url {
             Some(u) => format!("Title: {}\nURL: {}", title, u),
             None => format!("Title: {}", title),
         };
 
-        let prompt = "You are a helpful assistant that summarizes Hacker News stories in Chinese. \
-                      Requirements: \
-                      1. MUST be between 500-600 Chinese characters (字数必须在500-600字之间) \
-                      2. Provide comprehensive context, technical details, and implications \
-                      3. Write in clear, professional Chinese suitable for technical readers \
-                      Only output the Chinese summary, nothing else.";
+        if lang == "en" {
+            // Generate English summary
+            let prompt = "You are a helpful assistant that summarizes Hacker News stories in English. \
+                          Requirements: \
+                          1. MUST be between 200-300 words \
+                          2. Provide comprehensive context, technical details, and implications \
+                          3. Write in clear, professional English suitable for technical readers \
+                          Only output the summary, nothing else.";
 
-        let response = self.call_llm(prompt, &context).await?;
+            let response = self.call_llm(prompt, &context).await?;
+            Ok((Some(response.trim().to_string()), None))
+        } else {
+            // Generate Chinese summary
+            let prompt = "You are a helpful assistant that summarizes Hacker News stories in Chinese. \
+                          Requirements: \
+                          1. MUST be between 500-600 Chinese characters (字数必须在500-600字之间) \
+                          2. Provide comprehensive context, technical details, and implications \
+                          3. Write in clear, professional Chinese suitable for technical readers \
+                          Only output the Chinese summary, nothing else.";
 
-        // Return empty string for English summary, Chinese summary for the second field
-        Ok((String::new(), response.trim().to_string()))
+            let response = self.call_llm(prompt, &context).await?;
+            Ok((None, Some(response.trim().to_string())))
+        }
     }
 
     /// Internal helper to call the LLM API using the bot library
@@ -77,3 +92,4 @@ impl LlmClient {
         Ok(full_response)
     }
 }
+

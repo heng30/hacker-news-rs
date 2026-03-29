@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hacker News RSS Generator</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23ff6600'/%3E%3Ctext x='16' y='23' font-size='18' font-family='Arial,sans-serif' font-weight='bold' fill='white' text-anchor='middle'%3EHN%3C/text%3E%3C/svg%3E">
     <style>
         :root {
             --bg-primary: #f6f6ef;
@@ -693,9 +694,11 @@
                 </svg>
             </button>
             <button class="icon-btn" id="languageToggle" title="Toggle language">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                <svg id="langIconEn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <text x="12" y="17" font-size="18" font-family="Arial, sans-serif" font-weight="bold" fill="currentColor" stroke="none" text-anchor="middle">EN</text>
+                </svg>
+                <svg id="langIconZh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                    <text x="12" y="17" font-size="18" font-family="Arial, sans-serif" font-weight="bold" fill="currentColor" stroke="none" text-anchor="middle">中</text>
                 </svg>
             </button>
             <button class="icon-btn" id="themeToggle" title="Toggle theme">
@@ -983,7 +986,15 @@
         }
 
         function updateLanguageIcon() {
-            // Language button stays the same SVG, no text change needed
+            const enIcon = document.getElementById('langIconEn');
+            const zhIcon = document.getElementById('langIconZh');
+            if (currentLang === 'zh') {
+                enIcon.style.display = 'none';
+                zhIcon.style.display = 'block';
+            } else {
+                enIcon.style.display = 'block';
+                zhIcon.style.display = 'none';
+            }
         }
 
         // Toast Notification
@@ -1123,7 +1134,11 @@
             showToast(t('fetching'), 'loading', 3000);
 
             try {
-                const response = await fetch('/api/fetch', { method: 'POST' });
+                const response = await fetch('/api/fetch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lang: currentLang })
+                });
                 const data = await response.json();
                 if (data.success) {
                     hideToast();
@@ -1288,7 +1303,8 @@
                         ${s.score} points by ${escapeHtml(s.by)} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
                     </div>
-                    ${s.summary_zh ? `<div class="story-summary">${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
+                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${escapeHtml(s.summary_zh)}</div>` : ''}
                 </div>
             `}).join('');
         }
@@ -1341,7 +1357,8 @@
                         ${s.score} points by ${escapeHtml(s.by)} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
                     </div>
-                    ${s.summary_zh ? `<div class="story-summary">${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
+                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${escapeHtml(s.summary_zh)}</div>` : ''}
                 </div>
             `}).join('');
         }
@@ -1446,7 +1463,11 @@
             showToast(t('regeneratingSummary'), 'loading', 3000);
 
             try {
-                const response = await fetch(`/api/story/${hnId}/regenerate`, { method: 'PUT' });
+                const response = await fetch(`/api/story/${hnId}/regenerate`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lang: currentLang })
+                });
                 const data = await response.json();
                 if (data.success) {
                     showToast(t('summaryRegenerated'), 'success');
