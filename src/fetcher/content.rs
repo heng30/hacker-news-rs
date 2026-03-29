@@ -1,15 +1,29 @@
 use anyhow::Result;
 use htmd::HtmlToMarkdown;
 
+use crate::config::get_socks5_proxy_from_env;
+
 const MAX_CONTENT_LENGTH: usize = 32000;
 const TIMEOUT_SECS: u64 = 30;
 
 /// 从 URL 获取内容并转换为 Markdown
 pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
-    let client = reqwest::Client::builder()
+    let mut client_builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(TIMEOUT_SECS))
-        .user_agent("Mozilla/5.0 (compatible; HackerNewsRSS/1.0)")
-        .build()?;
+        .user_agent("Mozilla/5.0 (compatible; HackerNewsRSS/1.0)");
+
+    // 配置 SOCKS5 代理（如果设置了环境变量）
+    if let Some(proxy) = get_socks5_proxy_from_env() {
+        // 支持 socks5://, socks5h:// 或 host:port 格式
+        let proxy_url = if proxy.starts_with("socks5://") || proxy.starts_with("socks5h://") {
+            proxy
+        } else {
+            format!("socks5://{}", proxy)
+        };
+        client_builder = client_builder.proxy(reqwest::Proxy::all(&proxy_url)?);
+    }
+
+    let client = client_builder.build()?;
 
     let response = match client.get(url).send().await {
         Ok(r) => r,

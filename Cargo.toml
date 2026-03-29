@@ -18,20 +18,20 @@ log = "0.4"
 axum = "0.8"
 sqlx = "0.8"
 htmd = "0.5"
+tokio = "1.0"
+serde = "1.0"
 anyhow = "1.0"
 chrono = "0.4"
 tracing = "0.1"
 futures = "0.3"
+reqwest = "0.13"
 dotenvy = "0.15"
 thiserror = "2.0"
 tower-http = "0.6"
 serde_json = "1.0"
 env_logger = "0.11"
 tokio-stream = "0.1"
-tokio = { version = "1.0", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-reqwest = { version = "0.13", features = ["json", "stream"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = "0.3"
 
 [package]
 name = "hacker-news-rs"
@@ -43,17 +43,17 @@ license.workspace = true
 [dependencies]
 htmd.workspace = true
 axum.workspace = true
-tokio.workspace = true
-serde.workspace = true
 anyhow.workspace = true
-tracing.workspace = true
-reqwest.workspace = true
 futures.workspace = true
 dotenvy.workspace = true
+tracing.workspace = true
 serde_json.workspace = true
-tracing-subscriber.workspace = true
 chrono = { workspace = true, features = ["serde"] }
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true, features = ["derive"] }
 tower-http = { workspace = true, features = ["cors", "fs"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+reqwest = { workspace = true, features = ["json", "stream", "socks"] }
 
 bot = { path = "lib/bot" }

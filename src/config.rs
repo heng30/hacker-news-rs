@@ -9,6 +9,7 @@ pub const ENV_STORY_COUNT: &str = "HACKER_NEWS_STORY_COUNT";
 pub const ENV_DATABASE_URL: &str = "HACKER_NEWS_DATABASE_URL";
 pub const ENV_PORT: &str = "HACKER_NEWS_PORT";
 pub const ENV_AUTO_UPDATE_INTERVAL: &str = "HACKER_NEWS_AUTO_UPDATE_INTERVAL";
+pub const ENV_SOCKS5_PROXY: &str = "HACKER_NEWS_SOCKS5";
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -61,4 +62,10 @@ pub fn get_auto_update_interval_from_env() -> u32 {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0)
+}
+
+/// Get SOCKS5 proxy from environment variable
+/// Returns proxy URL if set (e.g., "127.0.0.1:1080" or "socks5://127.0.0.1:1080")
+pub fn get_socks5_proxy_from_env() -> Option<String> {
+    env::var(ENV_SOCKS5_PROXY).ok().filter(|s| !s.is_empty())
 }
