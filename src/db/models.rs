@@ -35,9 +35,9 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            story_count: 30,
-            api_base_url: "https://api.openai.com/v1".to_string(),
-            model: "gpt-4o-mini".to_string(),
+            story_count: 10,
+            api_base_url: "https://api.deepseek.com/v1".to_string(),
+            model: "deepseek-chat".to_string(),
             api_key: String::new(),
         }
     }
@@ -77,3 +77,4 @@ pub struct EpisodeWithStories {
     pub episode: Episode,
     pub stories: Vec<Story>,
 }
+
