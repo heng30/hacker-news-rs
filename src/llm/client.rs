@@ -54,7 +54,7 @@ impl LlmClient {
             // Generate Chinese summary
             let prompt = "You are a helpful assistant that summarizes Hacker News stories in Chinese. \
                           Requirements: \
-                          1. MUST be between 500-600 Chinese characters (字数必须在500-600字之间) \
+                          1. MUST be between 400-500 Chinese characters (字数必须在400-500字之间) \
                           2. Provide comprehensive context, technical details, and implications \
                           3. Write in clear, professional Chinese suitable for technical readers \
                           Only output the Chinese summary, nothing else.";
@@ -100,4 +100,3 @@ impl LlmClient {
         Ok(full_response)
     }
 }
-
