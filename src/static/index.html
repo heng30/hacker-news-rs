@@ -88,14 +88,21 @@
             color: white;
             font-size: 14px;
             font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-logo {
+            flex-shrink: 0;
         }
 
         .icon-btn {
             background: rgba(255,255,255,0.2);
             border: none;
             color: white;
-            width: 24px;
-            height: 24px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
@@ -110,8 +117,7 @@
         }
 
         .icon-btn:focus {
-            outline: 2px solid rgba(255,255,255,0.5);
-            outline-offset: 2px;
+            outline: none;
         }
 
         .icon-btn:disabled {
@@ -121,6 +127,8 @@
 
         /* Refresh button animation */
         .icon-btn svg {
+            width: 14px;
+            height: 14px;
             transition: transform 0.3s ease;
         }
 
@@ -137,6 +145,7 @@
         .main-container {
             flex: 1;
             display: flex;
+            align-items: flex-start;
             gap: 20px;
             padding: 20px;
             max-width: 1400px;
@@ -261,7 +270,6 @@
         .story-summary-zh {
             font-size: 13px;
             color: var(--text-muted);
-            font-style: italic;
         }
 
         .story.clicked .story-title a {
@@ -306,9 +314,10 @@
             border: none;
             color: var(--accent-color);
             cursor: pointer;
-            font-size: 16px;
-            padding: 4px 8px;
+            padding: 4px;
             border-radius: 4px;
+            display: flex;
+            align-items: center;
         }
 
         .calendar-nav:hover {
@@ -350,14 +359,35 @@
         }
 
         .calendar-day.today {
-            background: var(--calendar-today);
-            color: white;
             font-weight: 600;
+            position: relative;
+        }
+
+        .calendar-day.today::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            background: var(--calendar-today);
+            border-radius: 50%;
         }
 
         .calendar-day.has-data {
             background: var(--calendar-has-data);
             color: white;
+        }
+
+        .calendar-day.selected {
+            background: var(--accent-color) !important;
+            color: white !important;
+            font-weight: 600;
+        }
+
+        .calendar-day.selected::after {
+            display: none;
         }
 
         
@@ -389,10 +419,10 @@
 
         .modal {
             background: var(--bg-secondary);
-            border-radius: 12px;
-            padding: 24px;
+            border-radius: 10px;
+            padding: 18px;
             width: 100%;
-            max-width: 480px;
+            max-width: 420px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
 
@@ -400,18 +430,18 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .modal-header h2 {
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 600;
         }
 
         .modal-close {
             background: none;
             border: none;
-            font-size: 24px;
+            font-size: 20px;
             color: var(--text-muted);
             cursor: pointer;
             line-height: 1;
@@ -422,23 +452,23 @@
         }
 
         .form-group {
-            margin-bottom: 16px;
+            margin-bottom: 12px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-            font-size: 14px;
+            margin-bottom: 4px;
+            font-weight: 500;
+            font-size: 13px;
             color: var(--text-primary);
         }
 
         .form-group input {
             width: 100%;
-            padding: 10px 12px;
+            padding: 8px 10px;
             border: 1px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 14px;
+            border-radius: 5px;
+            font-size: 13px;
             background: var(--bg-primary);
             color: var(--text-primary);
         }
@@ -456,22 +486,22 @@
         .env-badge {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 8px 12px;
+            gap: 5px;
+            padding: 5px 8px;
             background: var(--bg-tertiary);
-            border-radius: 6px;
-            font-size: 13px;
+            border-radius: 4px;
+            font-size: 12px;
             color: var(--text-secondary);
         }
 
-        .env-badge .check {
+        .env-badge .check-icon {
             color: #4caf50;
         }
 
         .modal-actions {
             display: flex;
-            gap: 10px;
-            margin-top: 24px;
+            gap: 8px;
+            margin-top: 16px;
         }
 
         .btn-primary {
@@ -479,11 +509,11 @@
             background: var(--accent-color);
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
+            padding: 8px 16px;
+            border-radius: 5px;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 500;
             transition: background 0.2s;
         }
 
@@ -496,11 +526,11 @@
             background: var(--bg-tertiary);
             color: var(--text-primary);
             border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
+            padding: 8px 16px;
+            border-radius: 5px;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 500;
         }
 
         .btn-secondary:hover {
@@ -512,11 +542,11 @@
             background: #dc3545;
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
+            padding: 8px 16px;
+            border-radius: 5px;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 500;
             transition: background 0.2s;
         }
 
@@ -526,7 +556,7 @@
 
         .modal-divider {
             border-top: 1px solid var(--border-color);
-            margin: 20px 0;
+            margin: 12px 0;
         }
 
         /* Loading spinner */
@@ -552,9 +582,9 @@
             color: var(--text-muted);
         }
 
-        .empty-state .icon {
-            font-size: 48px;
+        .empty-icon {
             margin-bottom: 15px;
+            opacity: 0.6;
         }
 
         /* Toast Notification */
@@ -650,26 +680,48 @@
     <!-- Navigation Bar -->
     <nav class="navbar">
         <div class="navbar-left">
-            <h1>📰 Hacker News RSS</h1>
+            <h1>
+                <svg class="nav-logo" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16v16H4z"/>
+                    <path d="M9 9h6M9 12h6M9 15h4"/>
+                </svg>
+                Hacker News RSS
+            </h1>
         </div>
         <div class="navbar-right">
             <button class="icon-btn" id="refreshBtn" title="Refresh stories" onclick="fetchStories()">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 12a9 9 0 11-2.636-6.364"/>
                     <path d="M21 3v6h-6"/>
                 </svg>
             </button>
             <button class="icon-btn" id="languageToggle" title="Toggle language">
-                🌐
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
             </button>
             <button class="icon-btn" id="themeToggle" title="Toggle theme">
-                <span id="themeIcon">🌙</span>
+                <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+                <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                    <circle cx="12" cy="12" r="5"/>
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                </svg>
             </button>
             <button class="icon-btn" id="markAllReadBtn" title="Mark all as read" onclick="markAllStoriesRead()">
-                📖
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    <path d="M8 7h8M8 11h8M8 15h5"/>
+                </svg>
             </button>
             <button class="icon-btn" id="configBtn" title="Settings">
-                ⚙️
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
             </button>
         </div>
     </nav>
@@ -680,7 +732,10 @@
         <div class="content-area">
             <div class="stories-container" id="storiesContainer">
                 <div class="empty-state">
-                    <div class="icon">📰</div>
+                    <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M4 4h16v16H4z"/>
+                        <path d="M9 9h6M9 12h6M9 15h4"/>
+                    </svg>
                     <p>No episode loaded</p>
                     <p style="font-size: 13px; margin-top: 8px;">Click "Fetch Stories" or select a date from the calendar</p>
                 </div>
@@ -691,9 +746,17 @@
         <aside class="calendar-sidebar">
             <div class="calendar-card">
                 <div class="calendar-header">
-                    <button class="calendar-nav" onclick="changeMonth(-1)">◀</button>
+                    <button class="calendar-nav" onclick="changeMonth(-1)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M15 18l-6-6 6-6"/>
+                        </svg>
+                    </button>
                     <h3 id="calendarTitle">March 2026</h3>
-                    <button class="calendar-nav" onclick="changeMonth(1)">▶</button>
+                    <button class="calendar-nav" onclick="changeMonth(1)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                    </button>
                 </div>
                 <div class="calendar-grid" id="calendarGrid">
                     <!-- Calendar will be generated here -->
@@ -706,7 +769,13 @@
     <div class="modal-overlay" id="configModal">
         <div class="modal">
             <div class="modal-header">
-                <h2 id="configModalTitle">⚙️ Configuration</h2>
+                <h2 id="configModalTitle">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    <span id="configModalTitleText">Configuration</span>
+                </h2>
                 <button class="modal-close" onclick="closeModal()">&times;</button>
             </div>
 
@@ -795,7 +864,7 @@
                 summaryZhLabel: '中文摘要',
                 fetching: 'Fetching stories from Hacker News and generating summaries...',
                 fetchedSuccess: 'Fetched {count} stories for {date}',
-                configTitle: '⚙️ Configuration',
+                configTitle: 'Configuration',
                 configStoryCount: 'Number of Stories',
                 configAutoUpdateInterval: 'Auto Update Interval',
                 configApiBaseUrl: 'API Base URL',
@@ -830,7 +899,7 @@
                 summaryZhLabel: '中文摘要',
                 fetching: '正在获取 Hacker News 故事并生成摘要...',
                 fetchedSuccess: '已获取 {count} 条故事，日期：{date}',
-                configTitle: '⚙️ 配置',
+                configTitle: '配置',
                 configStoryCount: '故事数量',
                 configAutoUpdateInterval: '自动更新间隔',
                 configApiBaseUrl: 'API 地址',
@@ -879,8 +948,15 @@
         }
 
         function updateThemeIcon(theme) {
-            const icon = document.getElementById('themeIcon');
-            icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+            const moonIcon = document.getElementById('themeIconMoon');
+            const sunIcon = document.getElementById('themeIconSun');
+            if (theme === 'dark') {
+                moonIcon.style.display = 'none';
+                sunIcon.style.display = 'block';
+            } else {
+                moonIcon.style.display = 'block';
+                sunIcon.style.display = 'none';
+            }
         }
 
         // Language Toggle
@@ -903,8 +979,7 @@
         }
 
         function updateLanguageIcon() {
-            const btn = document.getElementById('languageToggle');
-            btn.textContent = currentLang === 'zh' ? '中' : 'EN';
+            // Language button stays the same SVG, no text change needed
         }
 
         // Toast Notification
@@ -929,7 +1004,7 @@
         function openModal() {
             document.getElementById('configModal').classList.add('active');
             // Update modal labels with current language
-            document.getElementById('configModalTitle').textContent = t('configTitle');
+            document.getElementById('configModalTitleText').textContent = t('configTitle');
             document.getElementById('configLabelStoryCount').textContent = t('configStoryCount');
             document.getElementById('configLabelAutoUpdate').textContent = t('configAutoUpdateInterval');
             document.getElementById('configLabelApiBaseUrl').textContent = t('configApiBaseUrl');
@@ -975,7 +1050,7 @@
                     const storyCountContainer = document.getElementById('storyCountContainer');
                     storyCountContainer.innerHTML = `
                         <div class="env-badge">
-                            ${config.story_count_from_env ? '<span class="check">✓</span>' : ''}
+                            ${config.story_count_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
                             <span>${config.story_count}</span>
                         </div>
                     `;
@@ -987,7 +1062,7 @@
                         : t('configDisabled');
                     autoUpdateContainer.innerHTML = `
                         <div class="env-badge">
-                            <span class="check">✓</span>
+                            <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                             <span>${intervalText}</span>
                         </div>
                     `;
@@ -996,7 +1071,7 @@
                     const apiBaseUrlContainer = document.getElementById('apiBaseUrlContainer');
                     apiBaseUrlContainer.innerHTML = `
                         <div class="env-badge">
-                            ${config.api_base_url_from_env ? '<span class="check">✓</span>' : ''}
+                            ${config.api_base_url_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
                             <span>${config.api_base_url || 'default'}</span>
                         </div>
                     `;
@@ -1005,7 +1080,7 @@
                     const modelContainer = document.getElementById('modelContainer');
                     modelContainer.innerHTML = `
                         <div class="env-badge">
-                            ${config.model_from_env ? '<span class="check">✓</span>' : ''}
+                            ${config.model_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
                             <span>${config.model}</span>
                         </div>
                     `;
@@ -1014,7 +1089,7 @@
                     const apiKeyContainer = document.getElementById('apiKeyContainer');
                     apiKeyContainer.innerHTML = `
                         <div class="env-badge">
-                            ${config.api_key_from_env ? '<span class="check">✓</span>' : ''}
+                            ${config.api_key_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
                             <span>${config.masked_api_key}</span>
                         </div>
                     `;
@@ -1035,7 +1110,7 @@
                 const data = await response.json();
                 if (data.success) {
                     hideToast();
-                    showToast('✓ ' + t('fetchedSuccess', { count: data.data.stories_count, date: data.data.episode.date }), 'success');
+                    showToast(t('fetchedSuccess', { count: data.data.stories_count, date: data.data.episode.date }), 'success');
                     await loadEpisodes();
                     await loadLatestEpisode();
                 } else {
@@ -1074,7 +1149,10 @@
                 } else {
                     container.innerHTML = `
                         <div class="empty-state">
-                            <div class="icon">📰</div>
+                            <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M4 4h16v16H4z"/>
+                                <path d="M9 9h6M9 12h6M9 15h4"/>
+                            </svg>
                             <p>${t('emptyNoEpisodes')}</p>
                             <p style="font-size: 13px; margin-top: 8px;">${t('emptyCreateHint')}</p>
                         </div>
@@ -1083,7 +1161,11 @@
             } catch (error) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="icon">⚠️</div>
+                        <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
                         <p>${t('emptyError')}</p>
                         <p style="font-size: 13px; margin-top: 8px;">${escapeHtml(error.message)}</p>
                     </div>
@@ -1103,7 +1185,9 @@
                 } else {
                     container.innerHTML = `
                         <div class="empty-state">
-                            <div class="icon">📭</div>
+                            <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                            </svg>
                             <p>${t('emptyNotFound')}</p>
                         </div>
                     `;
@@ -1111,7 +1195,11 @@
             } catch (error) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="icon">⚠️</div>
+                        <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
                         <p>${t('emptyError')}</p>
                     </div>
                 `;
@@ -1142,7 +1230,9 @@
             if (!stories || stories.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="icon">📭</div>
+                        <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                        </svg>
                         <p>${t('emptyNoStories')}</p>
                     </div>
                 `;
@@ -1167,10 +1257,13 @@
                         <a href="${escapeHtml(s.url || '#')}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
                         <div class="story-actions">
                             <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
-                                ${isClicked ? '✓' : '📖'}
+                                ${isClicked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'}
                             </button>
                             <button class="regenerate-btn" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}">
-                                🔄
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 12a9 9 0 11-2.636-6.364"/>
+                                    <path d="M21 3v6h-6"/>
+                                </svg>
                             </button>
                         </div>
                     </div>
@@ -1178,8 +1271,8 @@
                         ${s.score} points by ${escapeHtml(s.by)} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
                     </div>
-                    ${s.summary ? `<div class="story-summary"><strong>${t('summaryLabel')}:</strong> ${escapeHtml(s.summary)}</div>` : ''}
-                    ${s.summary_zh ? `<div class="story-summary-zh"><strong>${t('summaryZhLabel')}:</strong> ${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
+                    ${s.summary_zh ? `<div class="story-summary-zh">${escapeHtml(s.summary_zh)}</div>` : ''}
                 </div>
             `}).join('');
 
@@ -1220,10 +1313,13 @@
                         <a href="${escapeHtml(s.url || '#')}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
                         <div class="story-actions">
                             <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
-                                ${isClicked ? '✓' : '📖'}
+                                ${isClicked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'}
                             </button>
                             <button class="regenerate-btn" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}">
-                                🔄
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 12a9 9 0 11-2.636-6.364"/>
+                                    <path d="M21 3v6h-6"/>
+                                </svg>
                             </button>
                         </div>
                     </div>
@@ -1231,8 +1327,8 @@
                         ${s.score} points by ${escapeHtml(s.by)} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
                     </div>
-                    ${s.summary ? `<div class="story-summary"><strong>${t('summaryLabel')}:</strong> ${escapeHtml(s.summary)}</div>` : ''}
-                    ${s.summary_zh ? `<div class="story-summary-zh"><strong>${t('summaryZhLabel')}:</strong> ${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
+                    ${s.summary_zh ? `<div class="story-summary-zh">${escapeHtml(s.summary_zh)}</div>` : ''}
                 </div>
             `}).join('');
         }
@@ -1420,9 +1516,9 @@
         }
 
         function selectDate(dateStr) {
-            if (episodesWithDates.has(dateStr)) {
-                loadEpisode(dateStr);
-            }
+            selectedDate = dateStr;
+            renderCalendar();
+            loadEpisode(dateStr);
         }
 
         // Utility
