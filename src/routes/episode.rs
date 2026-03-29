@@ -2,10 +2,10 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::Json,
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
@@ -22,8 +22,13 @@ pub fn episode_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/episode/latest", get(get_latest_episode))
         .route("/api/episode/{date}", get(get_episode_by_date))
+        .route("/api/episode/{date}", delete(delete_episode_by_date))
+        .route("/api/episode/{date}/stories", delete(delete_episode_stories))
         .route("/api/fetch", post(fetch_stories))
         .route("/api/stories", get(get_all_stories))
+        .route("/api/stories", delete(delete_all_stories))
+        .route("/api/stories/read", delete(delete_read_stories))
+        .route("/api/story/{hn_id}/regenerate", put(regenerate_story_summary))
         .route("/api/episodes", get(get_episodes_list))
 }
 
@@ -274,4 +279,158 @@ async fn get_episodes_list(
         )
     })?;
     Ok(Json(ApiResponse::success(episodes)))
+}
+
+#[derive(Serialize)]
+struct DeleteResponse {
+    deleted_count: usize,
+}
+
+/// Delete all stories from database
+async fn delete_all_stories(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<DeleteResponse>>, (StatusCode, Json<ApiResponse<DeleteResponse>>)> {
+    let deleted_count = db::delete_all_stories(&state.pool).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
+    Ok(Json(ApiResponse::success(DeleteResponse { deleted_count })))
+}
+
+/// Delete an episode and all its stories by date
+async fn delete_episode_by_date(
+    State(state): State<Arc<AppState>>,
+    Path(date): Path<String>,
+) -> Result<Json<ApiResponse<DeleteResponse>>, (StatusCode, Json<ApiResponse<DeleteResponse>>)> {
+    let deleted_count = db::delete_episode_by_date(&state.pool, &date).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
+    Ok(Json(ApiResponse::success(DeleteResponse { deleted_count })))
+}
+
+/// Delete all stories for a specific episode (but keep the episode)
+async fn delete_episode_stories(
+    State(state): State<Arc<AppState>>,
+    Path(date): Path<String>,
+) -> Result<Json<ApiResponse<DeleteResponse>>, (StatusCode, Json<ApiResponse<DeleteResponse>>)> {
+    let episode = db::get_episode_by_date(&state.pool, &date).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
+
+    match episode {
+        Some(ep) => {
+            let deleted_count = db::delete_stories_by_episode(&state.pool, ep.id).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::error(&e.to_string())),
+                )
+            })?;
+            Ok(Json(ApiResponse::success(DeleteResponse { deleted_count })))
+        }
+        None => Err((StatusCode::NOT_FOUND, Json(ApiResponse::error("Episode not found"))))
+    }
+}
+
+#[derive(Serialize)]
+struct RegenerateResponse {
+    story: crate::db::models::Story,
+}
+
+/// Regenerate summary for a specific story
+async fn regenerate_story_summary(
+    State(state): State<Arc<AppState>>,
+    Path(hn_id): Path<i64>,
+) -> Result<Json<ApiResponse<RegenerateResponse>>, (StatusCode, Json<ApiResponse<RegenerateResponse>>)> {
+    // Get configuration
+    let config = db::get_config_with_env_overrides(&state.pool).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
+
+    if config.api_key.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("API key not configured")),
+        ));
+    }
+
+    // Get story by hn_id
+    let story = db::get_story_by_hn_id(&state.pool, hn_id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
+
+    match story {
+        Some(s) => {
+            // Initialize LLM client
+            let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
+
+            // Regenerate summary
+            tracing::info!("Regenerating summary for story {}: {}", s.hn_id, s.title);
+            let (summary, summary_zh) = llm_client
+                .summarize_and_translate(&s.title, s.url.as_deref())
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::error(&format!("Failed to regenerate summary: {}", e))),
+                    )
+                })?;
+
+            // Update story in database
+            db::update_story_summary(&state.pool, s.id, &summary, &summary_zh).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::error(&e.to_string())),
+                )
+            })?;
+
+            // Return updated story
+            let updated_story = db::get_story_by_hn_id(&state.pool, hn_id).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::error(&e.to_string())),
+                )
+            })?.unwrap();
+
+            Ok(Json(ApiResponse::success(RegenerateResponse { story: updated_story })))
+        }
+        None => Err((StatusCode::NOT_FOUND, Json(ApiResponse::error("Story not found"))))
+    }
+}
+
+#[derive(Deserialize)]
+struct DeleteReadRequest {
+    hn_ids: Vec<i64>,
+}
+
+/// Delete stories by hn_ids (for removing read stories)
+async fn delete_read_stories(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<DeleteReadRequest>,
+) -> Result<Json<ApiResponse<DeleteResponse>>, (StatusCode, Json<ApiResponse<DeleteResponse>>)> {
+    if payload.hn_ids.is_empty() {
+        return Ok(Json(ApiResponse::success(DeleteResponse { deleted_count: 0 })));
+    }
+
+    let deleted_count = db::delete_stories_by_hn_ids(&state.pool, &payload.hn_ids).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
+
+    Ok(Json(ApiResponse::success(DeleteResponse { deleted_count })))
 }

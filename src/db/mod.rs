@@ -239,3 +239,105 @@ pub async fn get_existing_hn_ids(pool: &SqlitePool, episode_id: i64) -> Result<V
 
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
+
+/// Get story by hn_id
+pub async fn get_story_by_hn_id(pool: &SqlitePool, hn_id: i64) -> Result<Option<Story>> {
+    let story = sqlx::query_as::<_, Story>(
+        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at FROM stories WHERE hn_id = ?1",
+    )
+    .bind(hn_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(story)
+}
+
+/// Update summary for a story
+pub async fn update_story_summary(pool: &SqlitePool, story_id: i64, summary: &str, summary_zh: &str) -> Result<()> {
+    sqlx::query(
+        r#"
+        UPDATE stories SET summary = ?1, summary_zh = ?2, fetched_at = datetime('now')
+        WHERE id = ?3
+        "#,
+    )
+    .bind(summary)
+    .bind(summary_zh)
+    .bind(story_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Delete all stories from database and return count of deleted rows
+pub async fn delete_all_stories(pool: &SqlitePool) -> Result<usize> {
+    let result = sqlx::query("DELETE FROM stories")
+        .execute(pool)
+        .await?;
+
+    // Also delete all episodes
+    sqlx::query("DELETE FROM episodes")
+        .execute(pool)
+        .await?;
+
+    Ok(result.rows_affected() as usize)
+}
+
+/// Delete episode by date and all its stories, return count of deleted stories
+pub async fn delete_episode_by_date(pool: &SqlitePool, date: &str) -> Result<usize> {
+    // First get the episode id
+    let episode = get_episode_by_date(pool, date).await?;
+
+    match episode {
+        Some(ep) => {
+            // Delete stories first
+            let stories_result = sqlx::query("DELETE FROM stories WHERE episode_id = ?1")
+                .bind(ep.id)
+                .execute(pool)
+                .await?;
+
+            // Delete episode
+            sqlx::query("DELETE FROM episodes WHERE id = ?1")
+                .bind(ep.id)
+                .execute(pool)
+                .await?;
+
+            Ok(stories_result.rows_affected() as usize)
+        }
+        None => Ok(0)
+    }
+}
+
+/// Delete all stories for a specific episode (keep the episode)
+pub async fn delete_stories_by_episode(pool: &SqlitePool, episode_id: i64) -> Result<usize> {
+    let result = sqlx::query("DELETE FROM stories WHERE episode_id = ?1")
+        .bind(episode_id)
+        .execute(pool)
+        .await?;
+
+    Ok(result.rows_affected() as usize)
+}
+
+/// Delete stories by hn_ids and return count of deleted rows
+pub async fn delete_stories_by_hn_ids(pool: &SqlitePool, hn_ids: &[i64]) -> Result<usize> {
+    if hn_ids.is_empty() {
+        return Ok(0);
+    }
+
+    // Build the query with placeholders
+    let placeholders: Vec<String> = hn_ids.iter().map(|_| "?".to_string()).collect();
+    let query = format!(
+        "DELETE FROM stories WHERE hn_id IN ({})",
+        placeholders.join(",")
+    );
+
+    // Build the query dynamically
+    let mut query_builder = sqlx::query(&query);
+    for hn_id in hn_ids {
+        query_builder = query_builder.bind(hn_id);
+    }
+
+    let result = query_builder.execute(pool).await?;
+
+    Ok(result.rows_affected() as usize)
+}
