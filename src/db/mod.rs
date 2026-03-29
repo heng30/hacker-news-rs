@@ -36,6 +36,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             summary TEXT,
             summary_zh TEXT,
             fetched_at TEXT NOT NULL,
+            tag TEXT NOT NULL DEFAULT 'top',
             FOREIGN KEY (episode_id) REFERENCES episodes(id)
         );
         "#,
@@ -187,8 +188,8 @@ pub async fn save_story(pool: &SqlitePool, story: &Story) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
     sqlx::query(
         r#"
-        INSERT INTO stories (episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        INSERT INTO stories (episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
         "#,
     )
     .bind(story.episode_id)
@@ -201,6 +202,7 @@ pub async fn save_story(pool: &SqlitePool, story: &Story) -> Result<()> {
     .bind(&story.summary)
     .bind(&story.summary_zh)
     .bind(&now)
+    .bind(&story.tag)
     .execute(pool)
     .await?;
 
@@ -209,7 +211,7 @@ pub async fn save_story(pool: &SqlitePool, story: &Story) -> Result<()> {
 
 pub async fn get_stories_by_episode(pool: &SqlitePool, episode_id: i64) -> Result<Vec<Story>> {
     let stories = sqlx::query_as::<_, Story>(
-        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at FROM stories WHERE episode_id = ?1 ORDER BY score DESC",
+        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag FROM stories WHERE episode_id = ?1 ORDER BY score DESC",
     )
     .bind(episode_id)
     .fetch_all(pool)
@@ -220,7 +222,7 @@ pub async fn get_stories_by_episode(pool: &SqlitePool, episode_id: i64) -> Resul
 
 pub async fn get_all_stories(pool: &SqlitePool) -> Result<Vec<Story>> {
     let stories = sqlx::query_as::<_, Story>(
-        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at FROM stories ORDER BY fetched_at DESC",
+        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag FROM stories ORDER BY fetched_at DESC",
     )
     .fetch_all(pool)
     .await?;
@@ -243,7 +245,7 @@ pub async fn get_existing_hn_ids(pool: &SqlitePool, episode_id: i64) -> Result<V
 /// Get story by hn_id
 pub async fn get_story_by_hn_id(pool: &SqlitePool, hn_id: i64) -> Result<Option<Story>> {
     let story = sqlx::query_as::<_, Story>(
-        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at FROM stories WHERE hn_id = ?1",
+        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag FROM stories WHERE hn_id = ?1",
     )
     .bind(hn_id)
     .fetch_optional(pool)
@@ -277,6 +279,23 @@ pub async fn update_story_summary_by_lang(pool: &SqlitePool, story_id: i64, lang
         .execute(pool)
         .await?;
     }
+
+    Ok(())
+}
+
+/// Update both summaries for a story
+pub async fn update_story_summary(pool: &SqlitePool, story_id: i64, summary: Option<&str>, summary_zh: Option<&str>) -> Result<()> {
+    sqlx::query(
+        r#"
+        UPDATE stories SET summary = ?1, summary_zh = ?2, fetched_at = datetime('now')
+        WHERE id = ?3
+        "#,
+    )
+    .bind(summary)
+    .bind(summary_zh)
+    .bind(story_id)
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

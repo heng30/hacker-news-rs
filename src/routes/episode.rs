@@ -1,17 +1,23 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    response::Json,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Json,
+    },
     routing::{delete, get, post, put},
     Router,
 };
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::sync::Arc;
+use tokio_stream::StreamExt as _;
 
 use crate::db::{self, models::EpisodeWithStories};
 use crate::hn::api::HnClient;
 use crate::llm::client::LlmClient;
+use crate::config::get_search_keywords_from_env;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -25,6 +31,7 @@ pub fn episode_routes() -> Router<Arc<AppState>> {
         .route("/api/episode/{date}", delete(delete_episode_by_date))
         .route("/api/episode/{date}/stories", delete(delete_episode_stories))
         .route("/api/fetch", post(fetch_stories))
+        .route("/api/fetch/stream", get(fetch_stories_stream))
         .route("/api/stories", get(get_all_stories))
         .route("/api/stories", delete(delete_all_stories))
         .route("/api/stories/read", delete(delete_read_stories))
@@ -171,9 +178,58 @@ async fn fetch_stories(
         .take(config.story_count as usize)
         .collect();
 
-    tracing::info!("Fetching {} new stories (filtered out {} duplicates)", ids.len(), existing_ids_set.len());
+    tracing::info!("Fetching {} new top stories (filtered out {} duplicates)", ids.len(), existing_ids_set.len());
 
-    if ids.is_empty() {
+    // Fetch top stories details (tag="top")
+    let top_stories = if !ids.is_empty() {
+        hn_client.fetch_stories(&ids).await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&format!("Failed to fetch stories: {}", e))),
+            )
+        })?
+    } else {
+        Vec::new()
+    };
+
+    // Fetch keyword search results from Algolia
+    let keywords = get_search_keywords_from_env();
+    let search_stories = if let Some(kws) = keywords {
+        tracing::info!("Searching for keywords: {:?}", kws);
+        let mut stories = Vec::new();
+        for kw in kws {
+            // Use error handling instead of stopping on failure
+            match hn_client.search_newest(&kw, 10).await {
+                Ok(s) => {
+                    // Filter out existing stories
+                    let filtered: Vec<_> = s.into_iter().filter(|s| !existing_ids_set.contains(&s.id)).collect();
+                    tracing::info!("Found {} stories for keyword '{}' ({} new)", filtered.len(), kw, filtered.len());
+                    stories.extend(filtered);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to search Algolia for '{}': {}. Skipping this keyword.", kw, e);
+                    // Continue with next keyword instead of failing
+                    continue;
+                }
+            }
+        }
+        stories
+    } else {
+        Vec::new()
+    };
+
+    // Merge top stories and search results, deduplicate by hn_id
+    let mut all_stories: Vec<crate::db::models::HnStory> = top_stories;
+    let top_ids_set: std::collections::HashSet<i64> = all_stories.iter().map(|s| s.id).collect();
+    for story in search_stories {
+        if !top_ids_set.contains(&story.id) {
+            all_stories.push(story);
+        }
+    }
+
+    tracing::info!("Total {} unique stories to process ({} top + {} search unique)", all_stories.len(), top_ids_set.len(), all_stories.len() - top_ids_set.len());
+
+    if all_stories.is_empty() {
         // No new stories to fetch
         let episode = db::get_episode_by_date(&state.pool, &today)
             .await
@@ -196,13 +252,6 @@ async fn fetch_stories(
         })));
     }
 
-    let hn_stories = hn_client.fetch_stories(&ids).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(&format!("Failed to fetch stories: {}", e))),
-        )
-    })?;
-
     // Initialize LLM client
     tracing::info!("Initializing LLM client with base_url: {}, model: {}", config.api_base_url, config.model);
     let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
@@ -213,7 +262,7 @@ async fn fetch_stories(
     // Process each story
     let mut stories_count = 0;
     let mut first_error: Option<String> = None;
-    for hn_story in hn_stories {
+    for hn_story in all_stories {
         let mut story: crate::db::models::Story = hn_story.into();
         story.episode_id = episode_id;
 
@@ -476,4 +525,211 @@ async fn delete_read_stories(
     })?;
 
     Ok(Json(ApiResponse::success(DeleteResponse { deleted_count })))
+}
+
+// SSE Event Types
+#[derive(Serialize)]
+#[serde(tag = "type")]
+enum SseEvent {
+    #[serde(rename = "story_added")]
+    StoryAdded { story: crate::db::models::Story },
+    #[serde(rename = "summary_done")]
+    SummaryDone { hn_id: i64, summary: Option<String>, summary_zh: Option<String> },
+    #[serde(rename = "summary_error")]
+    SummaryError { hn_id: i64, error: String },
+    #[serde(rename = "done")]
+    Done { stories_count: usize },
+}
+
+#[derive(Deserialize)]
+struct StreamQuery {
+    lang: Option<String>,
+}
+
+/// SSE endpoint for streaming story fetch with async summaries
+async fn fetch_stories_stream(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<StreamQuery>,
+) -> Sse<impl Stream<Item = Result<Event, anyhow::Error>>> {
+    let pool = state.pool.clone();
+    let lang = query.lang.unwrap_or_else(|| "zh".to_string());
+
+    // Create a channel for sending events
+    let (tx, rx) = tokio::sync::mpsc::channel::<SseEvent>(100);
+
+    // Spawn the fetch task
+    tokio::spawn(async move {
+        if let Err(e) = fetch_stories_stream_task(pool, tx, &lang).await {
+            tracing::error!("Error in fetch_stories_stream_task: {}", e);
+        }
+    });
+
+    // Convert the receiver to a stream and map to SSE events
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx)
+        .map(|event| {
+            let json = serde_json::to_string(&event)?;
+            Ok(Event::default().data(json))
+        });
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+async fn fetch_stories_stream_task(
+    pool: SqlitePool,
+    tx: tokio::sync::mpsc::Sender<SseEvent>,
+    lang: &str,
+) -> anyhow::Result<()> {
+    // Get configuration with environment variable overrides
+    let config = db::get_config_with_env_overrides(&pool).await?;
+
+    if config.api_key.is_empty() {
+        return Err(anyhow::anyhow!("API key not configured"));
+    }
+
+    // Get today's date
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+    // Create or get episode
+    let episode_id = db::create_episode(&pool, &today).await?;
+
+    // Get existing hn_ids for this episode to avoid duplicates
+    let existing_hn_ids = db::get_existing_hn_ids(&pool, episode_id).await?;
+    let existing_ids_set: std::collections::HashSet<i64> = existing_hn_ids.into_iter().collect();
+    tracing::info!("Found {} existing stories for episode {}", existing_ids_set.len(), episode_id);
+
+    // Fetch top stories from HN
+    let hn_client = HnClient::new();
+    let top_ids = hn_client.fetch_top_stories().await?;
+
+    // Filter out already existing stories and take top N based on config
+    let ids: Vec<i64> = top_ids
+        .into_iter()
+        .filter(|id| !existing_ids_set.contains(id))
+        .take(config.story_count as usize)
+        .collect();
+
+    tracing::info!("Fetching {} new top stories (filtered out {} duplicates)", ids.len(), existing_ids_set.len());
+
+    // Fetch top stories details (tag="top")
+    let top_stories = if !ids.is_empty() {
+        hn_client.fetch_stories(&ids).await?
+    } else {
+        Vec::new()
+    };
+
+    // Fetch keyword search results from Algolia
+    let keywords = crate::config::get_search_keywords_from_env();
+    let search_stories = if let Some(kws) = keywords {
+        tracing::info!("Searching for keywords: {:?}", kws);
+        let mut stories = Vec::new();
+        for kw in kws {
+            // Use error handling instead of stopping on failure
+            match hn_client.search_newest(&kw, 10).await {
+                Ok(s) => {
+                    let filtered: Vec<_> = s.into_iter().filter(|s| !existing_ids_set.contains(&s.id)).collect();
+                    tracing::info!("Found {} stories for keyword '{}' ({} new)", filtered.len(), kw, filtered.len());
+                    stories.extend(filtered);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to search Algolia for '{}': {}. Skipping this keyword.", kw, e);
+                    continue;
+                }
+            }
+        }
+        stories
+    } else {
+        Vec::new()
+    };
+
+    // Merge top stories and search results, deduplicate by hn_id
+    let mut all_hn_stories: Vec<crate::db::models::HnStory> = top_stories;
+    let top_ids_set: std::collections::HashSet<i64> = all_hn_stories.iter().map(|s| s.id).collect();
+    for story in search_stories {
+        if !top_ids_set.contains(&story.id) {
+            all_hn_stories.push(story);
+        }
+    }
+
+    tracing::info!("Total {} unique stories to process", all_hn_stories.len());
+
+    if all_hn_stories.is_empty() {
+        tx.send(SseEvent::Done { stories_count: 0 }).await?;
+        return Ok(());
+    }
+
+    // Initialize LLM client
+    tracing::info!("Initializing LLM client with base_url: {}, model: {}", config.api_base_url, config.model);
+    let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
+
+    // Save stories without summaries first and send story_added events
+    let mut saved_stories: Vec<(crate::db::models::Story, i64)> = Vec::new();
+    for hn_story in all_hn_stories {
+        let mut story: crate::db::models::Story = hn_story.into();
+        story.episode_id = episode_id;
+
+        // Save story without summary
+        db::save_story(&pool, &story).await?;
+
+        // Get the saved story with its database ID
+        let saved = db::get_story_by_hn_id(&pool, story.hn_id).await?;
+        if let Some(saved_story) = saved {
+            saved_stories.push((saved_story.clone(), saved_story.id));
+            // Send story_added event immediately
+            tx.send(SseEvent::StoryAdded { story: saved_story }).await?;
+        }
+    }
+
+    // Generate summaries in parallel with concurrency control (3-5 per batch)
+    let mut stories_count = 0;
+    for chunk in saved_stories.chunks(3) {
+        let futures: Vec<_> = chunk
+            .iter()
+            .map(|(story, story_id)| {
+                let pool = pool.clone();
+                let tx = tx.clone();
+                let llm_client = llm_client.clone();
+                let lang = lang.to_string();
+                let story_clone = story.clone();
+                let story_id_clone = *story_id;
+
+                async move {
+                    tracing::info!("Generating {} summary for story {}: {}", lang, story_clone.hn_id, story_clone.title);
+                    match llm_client.summarize(&story_clone.title, story_clone.url.as_deref(), &lang).await {
+                        Ok((summary, summary_zh)) => {
+                            tracing::info!("Successfully generated summary for story {}", story_clone.hn_id);
+                            // Update database
+                            if let Err(e) = db::update_story_summary(&pool, story_id_clone, summary.as_deref(), summary_zh.as_deref()).await {
+                                tracing::error!("Failed to update summary for story {}: {}", story_clone.hn_id, e);
+                            }
+                            // Send summary_done event
+                            tx.send(SseEvent::SummaryDone {
+                                hn_id: story_clone.hn_id,
+                                summary,
+                                summary_zh,
+                            }).await.ok();
+                            true
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to summarize story {}: {}", story_clone.hn_id, e);
+                            // Send summary_error event
+                            tx.send(SseEvent::SummaryError {
+                                hn_id: story_clone.hn_id,
+                                error: e.to_string(),
+                            }).await.ok();
+                            false
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        // Execute batch concurrently
+        let results = futures::future::join_all(futures).await;
+        stories_count += results.iter().filter(|&r| *r).count();
+    }
+
+    // Send done event
+    tx.send(SseEvent::Done { stories_count }).await?;
+
+    Ok(())
 }

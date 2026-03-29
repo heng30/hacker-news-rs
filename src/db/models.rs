@@ -22,6 +22,7 @@ pub struct Story {
     pub summary: Option<String>,
     pub summary_zh: Option<String>,
     pub fetched_at: String,
+    pub tag: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ pub struct HnStory {
     pub by: String,
     pub score: i64,
     pub time: i64,
+    pub tag: String,
 }
 
 impl From<HnStory> for Story {
@@ -68,6 +70,7 @@ impl From<HnStory> for Story {
             summary: None,
             summary_zh: None,
             fetched_at: now,
+            tag: hn.tag,
         }
     }
 }

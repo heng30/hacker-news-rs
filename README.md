@@ -5,20 +5,32 @@ A Rust-based web service that fetches top stories from Hacker News and generates
 ## Features
 
 - Fetches top stories from Hacker News API
+- **Keyword search via Algolia HN Search API** - search for specific topics (e.g., "rust", "go", "linux")
 - Generates 500-600 character Chinese summaries using LLM
 - SQLite database for persistent storage
 - RESTful API for managing episodes and stories
 - Configurable story count, LLM model, and API settings
 - Episode-based organization (daily snapshots)
+- Tag badges showing story source (top stories vs keyword search)
 
 ## Hacker News API
 
-This project uses the official Hacker News Firebase API:
+This project uses two APIs:
+
+### Official HN Firebase API (for top stories)
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET https://hacker-news.firebaseio.com/v0/topstories.json` | Returns array of up to 500 top story IDs |
 | `GET https://hacker-news.firebaseio.com/v0/item/{id}.json` | Returns story details (title, url, by, score, time) |
+
+### Algolia HN Search API (for keyword search)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET https://hn.algolia.com/api/v1/search_by_date?query={keyword}&tags=story&hitsPerPage={limit}` | Search newest stories by keyword |
+
+Reference: https://hn.algolia.com/api
 
 ### Story Data Structure
 
@@ -29,11 +41,14 @@ This project uses the official Hacker News Firebase API:
   "url": "https://example.com",
   "by": "author_username",
   "score": 100,
-  "time": 1234567890
+  "time": 1234567890,
+  "tag": "rust"
 }
 ```
 
-API reference: https://github.com/HackerNews/API
+The `tag` field indicates the source:
+- `"top"` - from top stories (hidden in UI)
+- keyword (e.g., `"rust"`, `"go"`) - from keyword search (shown as colored badge)
 
 ## Summary Generation Flow
 
@@ -103,6 +118,8 @@ Configure via environment variables (prefix: `HACKER_NEWS_`):
 | `HACKER_NEWS_MODEL` | LLM model name | `deepseek-chat` |
 | `HACKER_NEWS_STORY_COUNT` | Number of stories per fetch | `10` |
 | `HACKER_NEWS_AUTO_UPDATE_INTERVAL` | Auto-update interval (minutes) | `0` (disabled) |
+| `HACKER_NEWS_SEARCH_KEYWORDS` | Comma-separated keywords for Algolia search | (disabled if empty) |
+| `HACKER_NEWS_SOCKS5` | SOCKS5 proxy for API requests | (disabled if empty) |
 
 ## Quick Start
 
@@ -117,6 +134,8 @@ Configure via environment variables (prefix: `HACKER_NEWS_`):
    HACKER_NEWS_OPENAI_API_KEY=your_api_key_here
    HACKER_NEWS_OPENAI_BASE_URL=https://api.deepseek.com/v1
    HACKER_NEWS_MODEL=deepseek-chat
+   # Optional: enable keyword search
+   HACKER_NEWS_SEARCH_KEYWORDS=rust,go,linux
    ```
 
 3. Build and run:

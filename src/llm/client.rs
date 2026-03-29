@@ -2,6 +2,7 @@ use anyhow::Result;
 use bot::{APIConfig, Chat, ChatConfig, StreamTextItem};
 use tokio::sync::mpsc;
 
+#[derive(Clone)]
 pub struct LlmClient {
     api_key: String,
     base_url: String,

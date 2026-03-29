@@ -267,6 +267,16 @@
             text-decoration: underline;
         }
 
+        .story-tag {
+            background: var(--accent-color);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+
         .story-summary {
             font-size: 14px;
             color: var(--text-secondary);
@@ -292,6 +302,21 @@
             padding: 0.1em 0.3em;
             border-radius: 3px;
             font-size: 0.9em;
+        }
+
+        .story-summary.placeholder {
+            color: var(--text-muted);
+            font-style: italic;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .story.summary-placeholder {
+            opacity: 0.85;
         }
 
         .story.clicked .story-title a {
@@ -456,10 +481,13 @@
         .modal-close {
             background: none;
             border: none;
-            font-size: 20px;
+            font-size: 24px;
             color: var(--text-muted);
             cursor: pointer;
             line-height: 1;
+            padding: 0;
+            margin: 0;
+            z-index: 10;
         }
 
         .modal-close:hover {
@@ -468,34 +496,30 @@
 
         .form-group {
             margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .form-group.data-management {
+            display: block;
+        }
+
+        .form-group.data-management label {
+            display: block;
+            margin-bottom: 8px;
         }
 
         .form-group label {
-            display: block;
-            margin-bottom: 4px;
             font-weight: 500;
             font-size: 13px;
             color: var(--text-primary);
+            flex-shrink: 0;
         }
 
-        .form-group input {
-            width: 100%;
-            padding: 8px 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            font-size: 13px;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: var(--accent-color);
-        }
-
-        .form-group input:disabled {
-            background: var(--bg-tertiary);
-            cursor: not-allowed;
+        .form-group .env-badge {
+            flex-shrink: 0;
         }
 
         .env-badge {
@@ -516,7 +540,10 @@
         .modal-actions {
             display: flex;
             gap: 8px;
-            margin-top: 16px;
+        }
+
+        .data-management .modal-actions {
+            margin-top: 8px;
         }
 
         .btn-primary {
@@ -737,6 +764,11 @@
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                 </svg>
             </button>
+            <a href="https://github.com/heng30/hacker-news-rs" target="_blank" rel="noopener noreferrer" class="icon-btn" title="GitHub" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+            </a>
         </div>
     </nav>
 
@@ -852,9 +884,27 @@
                 </div>
             </div>
 
-            <div class="modal-divider"></div>
+            <div class="form-group">
+                <label id="configLabelSocks5">SOCKS5 Proxy</label>
+                <div id="socks5Container">
+                    <div class="env-badge">
+                        <span>-</span>
+                    </div>
+                </div>
+            </div>
 
             <div class="form-group">
+                <label id="configLabelSearchKeywords">Search Keywords</label>
+                <div id="searchKeywordsContainer">
+                    <div class="env-badge">
+                        <span>-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="form-group data-management">
                 <label id="configLabelDataManagement">Data Management</label>
                 <div class="modal-actions">
                     <button class="btn-secondary" id="removeAllReadBtn" onclick="removeAllReadStories()">
@@ -898,6 +948,8 @@
                 configApiBaseUrl: 'API Base URL',
                 configModel: 'Model',
                 configApiKey: 'API Key',
+                configSocks5: 'SOCKS5 Proxy',
+                configSearchKeywords: 'Search Keywords',
                 configDisabled: 'Disabled',
                 configMinutes: '{minutes} min',
                 configSetViaEnv: 'Set via environment',
@@ -935,6 +987,8 @@
                 configApiBaseUrl: 'API 地址',
                 configModel: '模型',
                 configApiKey: 'API 密钥',
+                configSocks5: 'SOCKS5 代理',
+                configSearchKeywords: '搜索关键字',
                 configDisabled: '已禁用',
                 configMinutes: '{minutes} 分钟',
                 configSetViaEnv: '通过环境变量设置',
@@ -1050,6 +1104,8 @@
             document.getElementById('configLabelApiBaseUrl').textContent = t('configApiBaseUrl');
             document.getElementById('configLabelModel').textContent = t('configModel');
             document.getElementById('configLabelApiKey').textContent = t('configApiKey');
+            document.getElementById('configLabelSocks5').textContent = t('configSocks5');
+            document.getElementById('configLabelSearchKeywords').textContent = t('configSearchKeywords');
             document.getElementById('configLabelDataManagement').textContent = t('configDataManagement');
             document.getElementById('removeAllReadText').textContent = t('removeAllReadStories');
             document.getElementById('removeAllText').textContent = t('removeAllStories');
@@ -1146,6 +1202,24 @@
                             <span>${config.masked_api_key}</span>
                         </div>
                     `;
+
+                    // SOCKS5 Proxy (read-only, always from env)
+                    const socks5Container = document.getElementById('socks5Container');
+                    socks5Container.innerHTML = `
+                        <div class="env-badge">
+                            <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>${config.socks5_proxy || t('configDisabled')}</span>
+                        </div>
+                    `;
+
+                    // Search Keywords (read-only, always from env)
+                    const searchKeywordsContainer = document.getElementById('searchKeywordsContainer');
+                    searchKeywordsContainer.innerHTML = `
+                        <div class="env-badge">
+                            <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>${config.search_keywords || t('configDisabled')}</span>
+                        </div>
+                    `;
                 }
             } catch (error) {
                 console.error('Failed to load config:', error);
@@ -1154,31 +1228,154 @@
 
         async function fetchStories() {
             const btn = document.getElementById('refreshBtn');
-
             btn.disabled = true;
-            showToast(t('fetching'), 'loading', 3000);
 
-            try {
-                const response = await fetch('/api/fetch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lang: currentLang })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    hideToast();
-                    showToast(t('fetchedSuccess', { count: data.data.stories_count, date: data.data.episode.date }), 'success');
-                    await loadEpisodes();
-                    await loadLatestEpisode();
-                } else {
-                    hideToast();
-                    showToast(data.error || 'Failed to fetch stories', 'error');
+            // Use SSE for streaming updates
+            const eventSource = new EventSource('/api/fetch/stream?lang=' + currentLang);
+            let storiesCount = 0;
+            let hasError = false;
+
+            showToast(t('fetching'), 'loading', 0); // Don't auto-hide
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    switch (data.type) {
+                        case 'story_added':
+                            // Add story to list immediately with placeholder
+                            addStoryToList(data.story);
+                            break;
+
+                        case 'summary_done':
+                            // Update the story's summary
+                            updateStorySummary(data.hn_id, data.summary, data.summary_zh);
+                            storiesCount++;
+                            break;
+
+                        case 'summary_error':
+                            // Show error for this story
+                            updateStorySummary(data.hn_id, null, null, data.error);
+                            break;
+
+                        case 'done':
+                            hideToast();
+                            if (storiesCount > 0) {
+                                showToast(t('fetchedSuccess', { count: storiesCount, date: selectedDate || '' }), 'success');
+                            } else if (hasError) {
+                                showToast(t('fetchError'), 'error');
+                            }
+                            eventSource.close();
+                            btn.disabled = false;
+                            // Refresh episodes list
+                            loadEpisodes();
+                            break;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse SSE event:', e);
                 }
-            } catch (error) {
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE error:', error);
                 hideToast();
-                showToast('Error: ' + error.message, 'error');
-            } finally {
+                showToast('Connection error', 'error');
+                eventSource.close();
                 btn.disabled = false;
+                hasError = true;
+            };
+        }
+
+        // Add a story to the list with placeholder for summary
+        function addStoryToList(story) {
+            const container = document.getElementById('storiesContainer');
+
+            // Initialize currentStories if not set
+            if (!window.currentStories) {
+                window.currentStories = [];
+            }
+
+            // Check if story already exists in the list
+            const existingIndex = window.currentStories.findIndex(s => s.hn_id === story.hn_id);
+            if (existingIndex >= 0) {
+                // Update existing story
+                window.currentStories[existingIndex] = story;
+            } else {
+                // Add new story
+                window.currentStories.push(story);
+            }
+
+            // Re-render the stories list
+            refreshStoriesListWithPlaceholders();
+        }
+
+        // Refresh stories list with placeholders for pending summaries
+        function refreshStoriesListWithPlaceholders() {
+            const container = document.getElementById('storiesContainer');
+            const stories = window.currentStories || [];
+            if (stories.length === 0) return;
+
+            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
+            const clickedHnIds = new Set(clickedStories);
+
+            // Sort stories: unclicked first, clicked at the end
+            const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
+            const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
+            const sortedStories = [...unclickedStories, ...clickedStoriesList];
+
+            container.innerHTML = sortedStories.map((s, i) => {
+                const isClicked = clickedHnIds.has(s.hn_id);
+                const clickedClass = isClicked ? 'clicked' : '';
+                const hasSummary = (currentLang === 'en' && s.summary) || (currentLang === 'zh' && s.summary_zh);
+                const placeholderClass = !hasSummary ? 'summary-placeholder' : '';
+                const placeholderText = !hasSummary ? (currentLang === 'zh' ? '生成摘要中...' : 'Generating summary...') : '';
+
+                return `
+                <div class="story ${clickedClass} ${placeholderClass}" data-hn-id="${s.hn_id}">
+                    <div class="story-title">
+                        <a href="${escapeHtml(s.url || '#')}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
+                        <div class="story-actions">
+                            <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
+                                ${isClicked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'}
+                            </button>
+                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}" ${!hasSummary ? 'disabled' : ''}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 12a9 9 0 11-2.636-6.364"/>
+                                    <path d="M21 3v6h-6"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="story-meta">
+                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? `<span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
+                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
+                    </div>
+                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
+                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ''}
+                    ${!hasSummary ? `<div class="story-summary placeholder">${placeholderText}</div>` : ''}
+                </div>
+            `}).join('');
+        }
+
+        // Update a story's summary after it's generated
+        function updateStorySummary(hnId, summary, summaryZh, error = null) {
+            const stories = window.currentStories || [];
+            const storyIndex = stories.findIndex(s => s.hn_id === hnId);
+
+            if (storyIndex >= 0) {
+                if (error) {
+                    // Set error message as summary
+                    if (currentLang === 'zh') {
+                        stories[storyIndex].summary_zh = '生成摘要失败: ' + error;
+                    } else {
+                        stories[storyIndex].summary = 'Failed to generate summary: ' + error;
+                    }
+                } else {
+                    stories[storyIndex].summary = summary;
+                    stories[storyIndex].summary_zh = summaryZh;
+                }
+                window.currentStories = stories;
+                refreshStoriesListWithPlaceholders();
             }
         }
 
@@ -1325,7 +1522,7 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })} |
+                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? `<span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
                     </div>
                     ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
@@ -1379,7 +1576,7 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })} |
+                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? `<span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
                     </div>
                     ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}

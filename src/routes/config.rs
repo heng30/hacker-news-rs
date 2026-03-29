@@ -11,7 +11,7 @@ use std::sync::Arc;
 use crate::db;
 use crate::config::{
     get_base_url_from_env, get_model_from_env, get_story_count_from_env, get_api_key_from_env,
-    get_auto_update_interval_from_env,
+    get_auto_update_interval_from_env, get_socks5_proxy_from_env, get_search_keywords_from_env,
 };
 use crate::routes::AppState;
 
@@ -53,6 +53,12 @@ struct ConfigResponse {
     auto_update_interval_from_env: bool,
     // Masked API key for display (shows first 4 and last 4 characters)
     masked_api_key: String,
+    // SOCKS5 proxy (always from env)
+    socks5_proxy: Option<String>,
+    socks5_proxy_from_env: bool,
+    // Search keywords (always from env)
+    search_keywords: Option<String>,
+    search_keywords_from_env: bool,
 }
 
 #[derive(Deserialize)]
@@ -120,6 +126,10 @@ async fn get_config(
         api_key_from_env,
         auto_update_interval_from_env,
         masked_api_key,
+        socks5_proxy: get_socks5_proxy_from_env(),
+        socks5_proxy_from_env: true,
+        search_keywords: get_search_keywords_from_env().map(|kws| kws.join(",")),
+        search_keywords_from_env: true,
     };
 
     Ok(Json(ApiResponse::success(response)))
@@ -186,6 +196,10 @@ async fn update_config(
         api_key_from_env,
         auto_update_interval_from_env: true,
         masked_api_key,
+        socks5_proxy: get_socks5_proxy_from_env(),
+        socks5_proxy_from_env: true,
+        search_keywords: get_search_keywords_from_env().map(|kws| kws.join(",")),
+        search_keywords_from_env: true,
     };
 
     Ok(Json(ApiResponse::success(response)))
