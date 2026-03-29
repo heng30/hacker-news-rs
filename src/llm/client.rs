@@ -32,13 +32,12 @@ impl LlmClient {
             None => None,
         };
 
-        let context = match content {
-            Some(c) => format!("Title: {}\n\nContent:\n{}", title, c),
-            None => match url {
-                Some(u) => format!("Title: {}\nURL: {}", title, u),
-                None => format!("Title: {}", title),
-            },
-        };
+        // 内容抓取失败时返回空摘要，不调用 LLM
+        if content.is_none() {
+            return Ok((None, None));
+        }
+
+        let context = format!("Title: {}\n\nContent:\n{}", title, content.unwrap());
 
         if lang == "en" {
             // Generate English summary

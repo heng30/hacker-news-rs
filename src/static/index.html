@@ -273,6 +273,26 @@
             margin-bottom: 5px;
             line-height: 1.7;
         }
+        .story-summary p {
+            margin: 0.5em 0;
+        }
+        .story-summary ul, .story-summary ol {
+            margin: 0.5em 0;
+            padding-left: 1.5em;
+        }
+        .story-summary strong {
+            font-weight: 600;
+        }
+        .story-summary h1, .story-summary h2, .story-summary h3 {
+            margin: 0.5em 0;
+            font-weight: 600;
+        }
+        .story-summary code {
+            background: var(--bg-tertiary);
+            padding: 0.1em 0.3em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
 
         .story.clicked .story-title a {
             color: var(--text-muted);
@@ -658,6 +678,7 @@
             }
         }
     </style>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -892,7 +913,9 @@
                 allMarkedRead: 'All stories marked as read',
                 regeneratingSummary: 'Regenerating summary...',
                 summaryRegenerated: 'Summary regenerated successfully',
-                regenerateSummary: 'Regenerate summary'
+                regenerateSummary: 'Regenerate summary',
+                pointsBy: '{score} points by {author}',
+                discuss: 'discuss'
             },
             zh: {
                 emptyNoEpisode: '暂无内容',
@@ -927,7 +950,9 @@
                 allMarkedRead: '所有故事已标记为已读',
                 regeneratingSummary: '正在重新生成摘要...',
                 summaryRegenerated: '摘要已重新生成',
-                regenerateSummary: '重新生成摘要'
+                regenerateSummary: '重新生成摘要',
+                pointsBy: '{score} 分，作者：{author}',
+                discuss: '评论'
             }
         };
 
@@ -1300,11 +1325,11 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${s.score} points by ${escapeHtml(s.by)} |
-                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
+                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })} |
+                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
                     </div>
-                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
-                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
+                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ''}
                 </div>
             `}).join('');
         }
@@ -1354,11 +1379,11 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${s.score} points by ${escapeHtml(s.by)} |
-                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
+                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })} |
+                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
                     </div>
-                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
-                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
+                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ''}
                 </div>
             `}).join('');
         }
@@ -1563,6 +1588,15 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function renderMarkdown(text) {
+            if (!text) return '';
+            marked.setOptions({
+                breaks: true,
+                gfm: true
+            });
+            return marked.parse(text);
         }
     </script>
 </body>

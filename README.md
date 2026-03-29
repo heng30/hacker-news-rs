@@ -37,26 +37,43 @@ API reference: https://github.com/HackerNews/API
 
 ## Summary Generation Flow
 
-The LLM generates summaries based on story metadata only, without fetching article content:
+The LLM generates summaries based on story metadata and fetched article content:
 
 ```
-Hacker News API → Story Metadata (title, url) → LLM → Summary
+Hacker News API → Story Metadata (title, url) → Fetch HTML → Convert to Markdown → LLM → Summary (Markdown) → Frontend Rendering
 ```
+
+### Content Fetching
+
+The system fetches the article HTML content from the story URL and converts it to Markdown using the `htmd` library:
+
+1. Fetch HTML from URL (30 second timeout)
+2. Convert HTML to Markdown (using [htmd](https://crates.io/crates/htmd))
+3. Truncate to 32,000 characters if too long
+
+If content fetching fails (timeout, invalid URL, conversion error), the LLM falls back to using only the title and URL.
 
 ### LLM Input Format
 
-The prompt sent to the LLM includes only the title and URL:
+The prompt sent to the LLM includes the title and fetched content (or fallback to URL):
 
 ```
 Title: {story_title}
-URL: {story_url}
+
+Content:
+{markdown_content}
 ```
 
-The LLM generates a 500-600 character Chinese summary (or 200-300 word English summary) based solely on the title context.
+The LLM generates a 500-600 character Chinese summary (or 200-300 word English summary) based on the actual article content when available.
 
-### Limitation
+### Markdown Rendering
 
-Since article content is not fetched, the summary quality depends on how informative the title is. For better summaries, consider adding content scraping in future versions.
+Summaries support Markdown formatting (bold, lists, headers, code). The frontend renders these using [marked.js](https://marked.js.org/) with GitHub Flavored Markdown (GFM) support. Common Markdown elements in summaries:
+
+- **Bold text** for emphasis
+- Bullet lists for key points
+- Headers for section organization
+- Code blocks for technical terms
 
 ## API Endpoints
 

@@ -37,26 +37,43 @@ API 参考：https://github.com/HackerNews/API
 
 ## 摘要生成流程
 
-LLM 仅基于故事元数据生成摘要，不抓取文章内容：
+LLM 基于故事元数据和抓取的文章内容生成摘要：
 
 ```
-Hacker News API → 故事元数据 (title, url) → LLM → 摘要
+Hacker News API → 故事元数据 (title, url) → 获取 HTML → 转换为 Markdown → LLM → 摘要 (Markdown) → 前端渲染
 ```
+
+### 内容抓取
+
+系统从故事 URL 抓取 HTML 内容并转换为 Markdown（使用 `htmd` 库）：
+
+1. 从 URL 获取 HTML（30 秒超时）
+2. 将 HTML 转换为 Markdown（使用 [htmd](https://crates.io/crates/htmd)）
+3. 内容过长时截断至 32,000 字符
+
+如果内容抓取失败（超时、无效 URL、转换错误），LLM 会回退到仅使用标题和 URL。
 
 ### LLM 输入格式
 
-发送给 LLM 的提示词仅包含标题和 URL：
+发送给 LLM 的提示词包含标题和抓取的内容（失败时回退到 URL）：
 
 ```
 Title: {story_title}
-URL: {story_url}
+
+Content:
+{markdown_content}
 ```
 
-LLM 仅根据标题上下文生成 500-600 字的中文摘要（或 200-300 词的英文摘要）。
+LLM 根据实际文章内容（如果可用）生成 500-600 字的中文摘要（或 200-300 词的英文摘要）。
 
-### 局限性
+### Markdown 渲染
 
-由于不抓取文章内容，摘要质量取决于标题的信息量。如需更高质量的摘要，可考虑在后续版本中添加内容抓取功能。
+摘要支持 Markdown 格式（粗体、列表、标题、代码）。前端使用 [marked.js](https://marked.js.org/) 渲染，支持 GitHub Flavored Markdown (GFM)。摘要中常见的 Markdown 元素：
+
+- **粗体文本** 用于强调
+- 无序列表用于列举要点
+- 标题用于组织段落
+- 代码块用于技术术语
 
 ## API 接口
 
