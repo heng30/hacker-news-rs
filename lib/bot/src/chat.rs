@@ -72,6 +72,7 @@ impl Chat {
         let client = reqwest::Client::new();
 
         let url = format!("{}{}", self.config.api_base_url, "/chat/completions");
+
         let request_body = request::ChatCompletion {
             messages: self.messages,
             model: self.config.api_model,
@@ -79,21 +80,35 @@ impl Chat {
             stream: true,
         };
 
-        let mut stream = client
-            .post(url)
+        let response = client
+            .post(&url)
             .headers(headers)
             .json(&request_body)
             .timeout(Duration::from_secs(15))
             .send()
-            .await?
-            .bytes_stream();
+            .await?;
+
+        let status = response.status();
+
+        if !status.is_success() {
+            let error_body = response.text().await?;
+            log::error!("API error: status={}, body={}", status, error_body);
+            let item = response::StreamTextItem {
+                etext: Some(format!("API error: {}", error_body)),
+                ..Default::default()
+            };
+            if self.chat_tx.send(item).await.is_err() {
+                log::info!("receiver dropped");
+            }
+            return Ok(());
+        }
+
+        let mut stream = response.bytes_stream();
 
         loop {
             match stream.next().await {
                 Some(Ok(chunk)) => {
                     let body = String::from_utf8_lossy(&chunk);
-
-                    // log::debug!("{body:?}");
 
                     if let Ok(err) = serde_json::from_str::<response::Error>(&body) {
                         if let Some(estr) = err.error.get("message") {
@@ -105,7 +120,7 @@ impl Chat {
                                 log::info!("receiver dropped");
                                 break;
                             }
-                            log::info!("{}", estr);
+                            log::error!("API error: {}", estr);
                         }
                         break;
                     }
@@ -133,11 +148,6 @@ impl Chat {
                                         log::info!("receiver dropped");
                                         break;
                                     }
-
-                                    log::info!(
-                                        "finish_reason: {}",
-                                        choice.finish_reason.as_ref().unwrap()
-                                    );
                                     break;
                                 }
 
@@ -156,7 +166,6 @@ impl Chat {
                                         ..Default::default()
                                     })
                                 } else if choice.delta.contains_key("role") {
-                                    log::info!("role: {:?}", choice.delta["role"]);
                                     None
                                 } else {
                                     None
@@ -170,7 +179,7 @@ impl Chat {
                                 }
                             }
                             Err(e) => {
-                                log::info!("{e:?} {}", &line);
+                                log::error!("Parse error: {:?} {}", e, &line);
                                 break;
                             }
                         }
