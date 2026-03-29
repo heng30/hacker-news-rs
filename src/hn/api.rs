@@ -88,7 +88,7 @@ impl HnClient {
     /// tag parameter is used to mark the search source (the keyword itself)
     pub async fn search_newest(&self, keyword: &str, limit: usize) -> Result<Vec<HnStory>> {
         let url = format!(
-            "{}search_by_date?query={}&tags=story&hitsPerPage={}",
+            "{}/search_by_date?query={}&tags=story&hitsPerPage={}",
             ALGOLIA_API_BASE, keyword, limit
         );
         tracing::info!("Searching Algolia for keyword '{}' with limit {}", keyword, limit);

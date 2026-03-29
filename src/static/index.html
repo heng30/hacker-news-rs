@@ -268,13 +268,7 @@
         }
 
         .story-tag {
-            background: var(--accent-color);
-            color: white;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 11px;
-            margin-left: 4px;
-            vertical-align: middle;
+            color: var(--text-muted);
         }
 
         .story-summary {
@@ -1235,7 +1229,7 @@
             let storiesCount = 0;
             let hasError = false;
 
-            showToast(t('fetching'), 'loading', 0); // Don't auto-hide
+            showToast(t('fetching'), 'loading', 3000);
 
             eventSource.onmessage = (event) => {
                 try {
@@ -1347,7 +1341,7 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? `<span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
+                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
                     </div>
                     ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
@@ -1522,7 +1516,7 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? `<span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
+                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
                     </div>
                     ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
@@ -1576,7 +1570,7 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? `<span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
+                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
                     </div>
                     ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
