@@ -11,8 +11,27 @@ use std::sync::Arc;
 use crate::db;
 use crate::config::{
     get_base_url_from_env, get_model_from_env, get_story_count_from_env, get_api_key_from_env,
+    get_auto_update_interval_from_env,
 };
 use crate::routes::AppState;
+
+/// Mask a sensitive string for display.
+/// Shows first 4 and last 4 characters, with asterisks in between.
+/// Minimum 8 characters required to show any part; otherwise shows all as asterisks.
+fn mask_sensitive_value(value: &str) -> String {
+    if value.is_empty() {
+        return "(not set)".to_string();
+    }
+    let len = value.len();
+    if len <= 8 {
+        // Too short to safely show any part
+        "*".repeat(len)
+    } else {
+        let first = &value[..4];
+        let last = &value[len - 4..];
+        format!("{}****{}", first, last)
+    }
+}
 
 pub fn config_routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -25,12 +44,15 @@ struct ConfigResponse {
     story_count: i32,
     api_base_url: String,
     model: String,
+    auto_update_interval: u32,
     // Indicate which values are overridden by environment variables
     story_count_from_env: bool,
     api_base_url_from_env: bool,
     model_from_env: bool,
     api_key_from_env: bool,
-    // Note: Don't expose actual API key value in responses
+    auto_update_interval_from_env: bool,
+    // Masked API key for display (shows first 4 and last 4 characters)
+    masked_api_key: String,
 }
 
 #[derive(Deserialize)]
@@ -81,15 +103,23 @@ async fn get_config(
     let api_base_url_from_env = get_base_url_from_env().is_some();
     let model_from_env = get_model_from_env().is_some();
     let api_key_from_env = get_api_key_from_env().is_some();
+    let auto_update_interval_from_env = true; // auto_update_interval always comes from env
+
+    // Get the actual API key (from env or db) for masking
+    let actual_api_key = get_api_key_from_env().unwrap_or(db_config.api_key);
+    let masked_api_key = mask_sensitive_value(&actual_api_key);
 
     let response = ConfigResponse {
         story_count: get_story_count_from_env().unwrap_or(db_config.story_count),
         api_base_url: get_base_url_from_env().unwrap_or(db_config.api_base_url),
         model: get_model_from_env().unwrap_or(db_config.model),
+        auto_update_interval: get_auto_update_interval_from_env(),
         story_count_from_env,
         api_base_url_from_env,
         model_from_env,
         api_key_from_env,
+        auto_update_interval_from_env,
+        masked_api_key,
     };
 
     Ok(Json(ApiResponse::success(response)))
@@ -140,15 +170,22 @@ async fn update_config(
         )
     })?;
 
+    // Get the actual API key (from env or db) for masking
+    let actual_api_key = get_api_key_from_env().unwrap_or(config.api_key);
+    let masked_api_key = mask_sensitive_value(&actual_api_key);
+
     // Return config with env overrides applied
     let response = ConfigResponse {
         story_count: get_story_count_from_env().unwrap_or(config.story_count),
         api_base_url: get_base_url_from_env().unwrap_or(config.api_base_url),
         model: get_model_from_env().unwrap_or(config.model),
+        auto_update_interval: get_auto_update_interval_from_env(),
         story_count_from_env,
         api_base_url_from_env,
         model_from_env,
         api_key_from_env,
+        auto_update_interval_from_env: true,
+        masked_api_key,
     };
 
     Ok(Json(ApiResponse::success(response)))

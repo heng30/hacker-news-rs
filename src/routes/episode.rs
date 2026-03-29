@@ -132,6 +132,18 @@ async fn fetch_stories(
             )
         })?;
 
+    // Get existing hn_ids for this episode to avoid duplicates
+    let existing_hn_ids = db::get_existing_hn_ids(&state.pool, episode_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?;
+    let existing_ids_set: std::collections::HashSet<i64> = existing_hn_ids.into_iter().collect();
+    tracing::info!("Found {} existing stories for episode {}", existing_ids_set.len(), episode_id);
+
     // Fetch top stories from HN
     let hn_client = HnClient::new();
     let top_ids = hn_client.fetch_top_stories().await.map_err(|e| {
@@ -141,8 +153,38 @@ async fn fetch_stories(
         )
     })?;
 
-    // Take top N stories based on config
-    let ids: Vec<i64> = top_ids.into_iter().take(config.story_count as usize).collect();
+    // Filter out already existing stories and take top N based on config
+    let ids: Vec<i64> = top_ids
+        .into_iter()
+        .filter(|id| !existing_ids_set.contains(id))
+        .take(config.story_count as usize)
+        .collect();
+
+    tracing::info!("Fetching {} new stories (filtered out {} duplicates)", ids.len(), existing_ids_set.len());
+
+    if ids.is_empty() {
+        // No new stories to fetch
+        let episode = db::get_episode_by_date(&state.pool, &today)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::error(&e.to_string())),
+                )
+            })?
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::error("Failed to get created episode")),
+                )
+            })?;
+
+        return Ok(Json(ApiResponse::success(FetchResponse {
+            episode,
+            stories_count: 0,
+        })));
+    }
+
     let hn_stories = hn_client.fetch_stories(&ids).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -151,7 +193,8 @@ async fn fetch_stories(
     })?;
 
     // Initialize LLM client
-    let llm_client = LlmClient::new(config.api_key, config.api_base_url, config.model);
+    tracing::info!("Initializing LLM client with base_url: {}, model: {}", config.api_base_url, config.model);
+    let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
 
     // Process each story
     let mut stories_count = 0;
@@ -160,13 +203,21 @@ async fn fetch_stories(
         story.episode_id = episode_id;
 
         // Generate summary and translate
+        tracing::info!("Generating summary for story {}: {}", story.hn_id, story.title);
         match llm_client.summarize_and_translate(&story.title, story.url.as_deref()).await {
             Ok((summary, summary_zh)) => {
+                tracing::info!("Successfully generated summary for story {}", story.hn_id);
                 story.summary = Some(summary);
                 story.summary_zh = Some(summary_zh);
             }
             Err(e) => {
-                tracing::warn!("Failed to summarize story {}: {}", story.hn_id, e);
+                tracing::error!(
+                    "Failed to summarize story {} (title: '{}', url: {:?}): {}",
+                    story.hn_id,
+                    story.title,
+                    story.url,
+                    e
+                );
                 story.summary = Some("Failed to generate summary".to_string());
                 story.summary_zh = Some("生成摘要失败".to_string());
             }

@@ -227,3 +227,15 @@ pub async fn get_all_stories(pool: &SqlitePool) -> Result<Vec<Story>> {
 
     Ok(stories)
 }
+
+/// Get existing hn_ids for a specific episode to avoid duplicates
+pub async fn get_existing_hn_ids(pool: &SqlitePool, episode_id: i64) -> Result<Vec<i64>> {
+    let rows: Vec<(i64,)> = sqlx::query_as(
+        "SELECT hn_id FROM stories WHERE episode_id = ?1",
+    )
+    .bind(episode_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}

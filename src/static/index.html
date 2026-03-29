@@ -114,29 +114,8 @@
             outline-offset: 2px;
         }
 
-        .fetch-btn {
-            background: white;
-            color: var(--accent-color);
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: background 0.2s, transform 0.1s;
-        }
-
-        .fetch-btn:hover {
-            background: #f0f0f0;
-        }
-
-        .fetch-btn:active {
-            transform: scale(0.98);
-        }
-
-        .fetch-btn:disabled {
-            background: #ccc;
-            color: #888;
+        .icon-btn:disabled {
+            background: rgba(255,255,255,0.1);
             cursor: not-allowed;
         }
 
@@ -155,25 +134,6 @@
         .content-area {
             flex: 1;
             min-width: 0;
-        }
-
-        .episode-header {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 15px 20px;
-            margin-bottom: 15px;
-            box-shadow: var(--shadow);
-        }
-
-        .episode-header h2 {
-            font-size: 16px;
-            color: var(--text-secondary);
-        }
-
-        .episode-header .date {
-            color: var(--accent-color);
-            font-weight: 600;
         }
 
         .stories-container {
@@ -196,16 +156,45 @@
             font-size: 15px;
             font-weight: 600;
             margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .story-title a {
             color: var(--text-primary);
             text-decoration: none;
+            flex: 1;
         }
 
         .story-title a:hover {
             text-decoration: underline;
             color: var(--accent-color);
+        }
+
+        .mark-read-btn {
+            background: var(--bg-tertiary);
+            border: none;
+            color: var(--text-muted);
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .mark-read-btn:hover:not(:disabled) {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .mark-read-btn:disabled {
+            cursor: default;
+            opacity: 0.5;
         }
 
         .story-meta {
@@ -233,6 +222,14 @@
             font-size: 13px;
             color: var(--text-muted);
             font-style: italic;
+        }
+
+        .story.clicked .story-title a {
+            color: var(--text-muted);
+        }
+
+        .story.clicked .story-title a:hover {
+            color: var(--text-secondary);
         }
 
         /* Calendar Sidebar */
@@ -323,10 +320,7 @@
             color: white;
         }
 
-        .calendar-day.selected {
-            box-shadow: 0 0 0 2px var(--accent-color);
-        }
-
+        
         .calendar-day.empty {
             cursor: default;
         }
@@ -473,48 +467,29 @@
             background: var(--border-color);
         }
 
-        /* Status Messages */
-        .status-bar {
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            display: none;
+        .btn-danger {
+            flex: 1;
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s;
         }
 
-        .status-bar.success {
-            background: #d4edda;
-            color: #155724;
-            display: block;
+        .btn-danger:hover {
+            background: #c82333;
         }
 
-        .status-bar.error {
-            background: #f8d7da;
-            color: #721c24;
-            display: block;
+        .modal-divider {
+            border-top: 1px solid var(--border-color);
+            margin: 20px 0;
         }
 
-        .status-bar.loading {
-            background: #fff3cd;
-            color: #856404;
-            display: block;
-        }
-
-        [data-theme="dark"] .status-bar.success {
-            background: #1e4620;
-            color: #a8e6ab;
-        }
-
-        [data-theme="dark"] .status-bar.error {
-            background: #4a1e1e;
-            color: #f8a8a8;
-        }
-
-        [data-theme="dark"] .status-bar.loading {
-            background: #4a3d1e;
-            color: #ffe082;
-        }
-
-        .loading-spinner {
+        /* Loading spinner */
             display: inline-block;
             width: 14px;
             height: 14px;
@@ -542,6 +517,75 @@
             margin-bottom: 15px;
         }
 
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 300;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .toast.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .toast.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        [data-theme="dark"] .toast.success {
+            background: #1e4620;
+            color: #a8e6ab;
+        }
+
+        [data-theme="dark"] .toast.error {
+            background: #4a1e1e;
+            color: #f8a8a8;
+        }
+
+        [data-theme="dark"] .toast.loading {
+            background: #4a3d1e;
+            color: #ffe082;
+        }
+
+        /* Loading spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .main-container {
@@ -566,17 +610,21 @@
     <!-- Navigation Bar -->
     <nav class="navbar">
         <div class="navbar-left">
+            <h1>📰 Hacker News RSS</h1>
+        </div>
+        <div class="navbar-right">
+            <button class="icon-btn" id="refreshBtn" title="Refresh stories" onclick="fetchStories()">
+                🔄
+            </button>
+            <button class="icon-btn" id="languageToggle" title="Toggle language">
+                🌐
+            </button>
+            <button class="icon-btn" id="markAllReadBtn" title="Mark all as read" onclick="markAllStoriesRead()">
+                ✓📖
+            </button>
             <button class="icon-btn" id="themeToggle" title="Toggle theme">
                 <span id="themeIcon">🌙</span>
             </button>
-            <h1>📰 Hacker News RSS</h1>
-        </div>
-        <div class="navbar-center">
-            <button class="fetch-btn" id="fetchBtn" onclick="fetchStories()">
-                <span id="fetchBtnText">Fetch Stories</span>
-            </button>
-        </div>
-        <div class="navbar-right">
             <button class="icon-btn" id="configBtn" title="Settings">
                 ⚙️
             </button>
@@ -587,12 +635,6 @@
     <main class="main-container">
         <!-- Content Area -->
         <div class="content-area">
-            <div id="statusBar" class="status-bar"></div>
-
-            <div class="episode-header">
-                <h2>Episode: <span class="date" id="episodeDate">-</span></h2>
-            </div>
-
             <div class="stories-container" id="storiesContainer">
                 <div class="empty-state">
                     <div class="icon">📰</div>
@@ -617,55 +659,160 @@
         </aside>
     </main>
 
-    <!-- Config Modal -->
+    <!-- Config Modal (Read-only) -->
     <div class="modal-overlay" id="configModal">
         <div class="modal">
             <div class="modal-header">
-                <h2>⚙️ Configuration</h2>
+                <h2 id="configModalTitle">⚙️ Configuration</h2>
                 <button class="modal-close" onclick="closeModal()">&times;</button>
             </div>
 
             <div class="form-group">
-                <label for="storyCount">Number of Stories</label>
+                <label id="configLabelStoryCount">Number of Stories</label>
                 <div id="storyCountContainer">
-                    <input type="number" id="storyCount" min="1" max="100" value="30">
+                    <div class="env-badge">
+                        <span>-</span>
+                    </div>
                 </div>
             </div>
 
             <div class="form-group">
-                <label for="apiBaseUrl">API Base URL</label>
+                <label id="configLabelAutoUpdate">Auto Update</label>
+                <div id="autoUpdateContainer">
+                    <div class="env-badge">
+                        <span>-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label id="configLabelApiBaseUrl">API Base URL</label>
                 <div id="apiBaseUrlContainer">
-                    <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1">
+                    <div class="env-badge">
+                        <span>-</span>
+                    </div>
                 </div>
             </div>
 
             <div class="form-group">
-                <label for="model">Model</label>
+                <label id="configLabelModel">Model</label>
                 <div id="modelContainer">
-                    <input type="text" id="model" placeholder="gpt-4o-mini">
+                    <div class="env-badge">
+                        <span>-</span>
+                    </div>
                 </div>
             </div>
 
             <div class="form-group">
-                <label>API Key</label>
+                <label id="configLabelApiKey">API Key</label>
                 <div id="apiKeyContainer">
-                    <input type="password" id="apiKey" placeholder="Enter your API key">
+                    <div class="env-badge">
+                        <span>-</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="modal-actions">
-                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-                <button class="btn-primary" onclick="saveConfig()">Save</button>
+            <div class="modal-divider"></div>
+
+            <div class="form-group">
+                <label id="configLabelDataManagement">Data Management</label>
+                <div class="modal-actions">
+                    <button class="btn-secondary" id="removeAllReadBtn" onclick="removeAllReadStories()">
+                        <span id="removeAllReadText">Remove all read stories</span>
+                    </button>
+                    <button class="btn-danger" id="removeAllBtn" onclick="removeAllStories()">
+                        <span id="removeAllText">Remove all stories</span>
+                    </button>
+                </div>
             </div>
-            <div id="configStatus" style="margin-top: 15px; font-size: 13px;"></div>
         </div>
     </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
 
     <script>
         // State
         let currentMonth = new Date();
         let selectedDate = null;
         let episodesWithDates = new Set();
+        let currentLang = localStorage.getItem('lang') || 'en';
+
+        // i18n messages
+        const i18n = {
+            en: {
+                emptyNoEpisode: 'No episode loaded',
+                emptyHint: 'Click refresh button or select a date from the calendar',
+                emptyNoEpisodes: 'No episodes found',
+                emptyCreateHint: 'Click refresh button to create one',
+                emptyNotFound: 'Episode not found',
+                emptyNoStories: 'No stories in this episode',
+                emptyError: 'Error loading episode',
+                summaryLabel: 'Summary',
+                summaryZhLabel: '中文摘要',
+                fetching: 'Fetching stories from Hacker News and generating summaries...',
+                fetchedSuccess: 'Fetched {count} stories for {date}',
+                configTitle: '⚙️ Configuration',
+                configStoryCount: 'Number of Stories',
+                configAutoUpdateInterval: 'Auto Update Interval',
+                configApiBaseUrl: 'API Base URL',
+                configModel: 'Model',
+                configApiKey: 'API Key',
+                configDisabled: 'Disabled',
+                configMinutes: '{minutes} min',
+                configSetViaEnv: 'Set via environment',
+                configSetViaDb: 'Set via database',
+                configDataManagement: 'Data Management',
+                markRead: 'Mark as read',
+                markAllRead: 'Mark all as read',
+                removeAllStories: 'Remove all stories',
+                removeAllReadStories: 'Remove all read stories',
+                confirmRemoveAll: 'Are you sure you want to remove all stories?',
+                confirmRemoveRead: 'Are you sure you want to remove all read stories?',
+                removed: 'Removed {count} stories',
+                allMarkedRead: 'All stories marked as read'
+            },
+            zh: {
+                emptyNoEpisode: '暂无内容',
+                emptyHint: '点击刷新按钮或从日历中选择日期',
+                emptyNoEpisodes: '暂无数据',
+                emptyCreateHint: '点击刷新按钮创建',
+                emptyNotFound: '未找到该日期的内容',
+                emptyNoStories: '该日期暂无内容',
+                emptyError: '加载失败',
+                summaryLabel: '摘要',
+                summaryZhLabel: '中文摘要',
+                fetching: '正在获取 Hacker News 故事并生成摘要...',
+                fetchedSuccess: '已获取 {count} 条故事，日期：{date}',
+                configTitle: '⚙️ 配置',
+                configStoryCount: '故事数量',
+                configAutoUpdateInterval: '自动更新间隔',
+                configApiBaseUrl: 'API 地址',
+                configModel: '模型',
+                configApiKey: 'API 密钥',
+                configDisabled: '已禁用',
+                configMinutes: '{minutes} 分钟',
+                configSetViaEnv: '通过环境变量设置',
+                configSetViaDb: '通过数据库设置',
+                configDataManagement: '数据管理',
+                markRead: '标记已读',
+                markAllRead: '全部已读',
+                removeAllStories: '移除所有条目',
+                removeAllReadStories: '移除所有已读条目',
+                confirmRemoveAll: '确定要移除所有条目吗？',
+                confirmRemoveRead: '确定要移除所有已读条目吗？',
+                removed: '已移除 {count} 条故事',
+                allMarkedRead: '所有故事已标记为已读'
+            }
+        };
+
+        function t(key, replacements = {}) {
+            let text = i18n[currentLang][key] || i18n['en'][key] || key;
+            for (const [k, v] of Object.entries(replacements)) {
+                text = text.replace(`{${k}}`, v);
+            }
+            return text;
+        }
 
         // Theme Management
         function initTheme() {
@@ -687,9 +834,61 @@
             icon.textContent = theme === 'dark' ? '☀️' : '🌙';
         }
 
+        // Language Toggle
+        function initLanguage() {
+            const savedLang = localStorage.getItem('lang') || 'en';
+            currentLang = savedLang;
+            updateLanguageIcon();
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'en' ? 'zh' : 'en';
+            localStorage.setItem('lang', currentLang);
+            updateLanguageIcon();
+            // Refresh current view if there's content
+            if (selectedDate) {
+                loadEpisode(selectedDate);
+            } else {
+                loadLatestEpisode();
+            }
+        }
+
+        function updateLanguageIcon() {
+            const btn = document.getElementById('languageToggle');
+            btn.textContent = currentLang === 'zh' ? '中' : 'EN';
+        }
+
+        // Toast Notification
+        function showToast(message, type = 'success', duration = 3000) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+
+            if (duration > 0) {
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, duration);
+            }
+        }
+
+        function hideToast() {
+            const toast = document.getElementById('toast');
+            toast.classList.remove('show');
+        }
+
         // Modal Management
         function openModal() {
             document.getElementById('configModal').classList.add('active');
+            // Update modal labels with current language
+            document.getElementById('configModalTitle').textContent = t('configTitle');
+            document.getElementById('configLabelStoryCount').textContent = t('configStoryCount');
+            document.getElementById('configLabelAutoUpdate').textContent = t('configAutoUpdateInterval');
+            document.getElementById('configLabelApiBaseUrl').textContent = t('configApiBaseUrl');
+            document.getElementById('configLabelModel').textContent = t('configModel');
+            document.getElementById('configLabelApiKey').textContent = t('configApiKey');
+            document.getElementById('configLabelDataManagement').textContent = t('configDataManagement');
+            document.getElementById('removeAllReadText').textContent = t('removeAllReadStories');
+            document.getElementById('removeAllText').textContent = t('removeAllStories');
             loadConfig();
         }
 
@@ -700,8 +899,10 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             initTheme();
+            initLanguage();
 
             document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+            document.getElementById('languageToggle').addEventListener('click', toggleLanguage);
             document.getElementById('configBtn').addEventListener('click', openModal);
 
             document.getElementById('configModal').addEventListener('click', (e) => {
@@ -721,132 +922,82 @@
                 if (data.success) {
                     const config = data.data;
 
-                    // Story Count
-                    const storyCountInput = document.getElementById('storyCount');
+                    // Story Count (read-only)
                     const storyCountContainer = document.getElementById('storyCountContainer');
-                    storyCountInput.value = config.story_count;
-                    if (config.story_count_from_env) {
-                        storyCountInput.disabled = true;
-                        storyCountContainer.innerHTML = `
-                            <div class="env-badge">
-                                <span class="check">✓</span>
-                                <span>${config.story_count} (set via environment)</span>
-                            </div>
-                        `;
-                    }
+                    storyCountContainer.innerHTML = `
+                        <div class="env-badge">
+                            ${config.story_count_from_env ? '<span class="check">✓</span>' : ''}
+                            <span>${config.story_count}</span>
+                        </div>
+                    `;
 
-                    // API Base URL
-                    const apiBaseUrlInput = document.getElementById('apiBaseUrl');
+                    // Auto Update Interval (read-only, always from env)
+                    const autoUpdateContainer = document.getElementById('autoUpdateContainer');
+                    const intervalText = config.auto_update_interval > 0
+                        ? t('configMinutes', { minutes: config.auto_update_interval })
+                        : t('configDisabled');
+                    autoUpdateContainer.innerHTML = `
+                        <div class="env-badge">
+                            <span class="check">✓</span>
+                            <span>${intervalText}</span>
+                        </div>
+                    `;
+
+                    // API Base URL (read-only)
                     const apiBaseUrlContainer = document.getElementById('apiBaseUrlContainer');
-                    apiBaseUrlInput.value = config.api_base_url;
-                    if (config.api_base_url_from_env) {
-                        apiBaseUrlInput.disabled = true;
-                        apiBaseUrlContainer.innerHTML = `
-                            <div class="env-badge">
-                                <span class="check">✓</span>
-                                <span>${config.api_base_url || 'default'} (set via environment)</span>
-                            </div>
-                        `;
-                    }
+                    apiBaseUrlContainer.innerHTML = `
+                        <div class="env-badge">
+                            ${config.api_base_url_from_env ? '<span class="check">✓</span>' : ''}
+                            <span>${config.api_base_url || 'default'}</span>
+                        </div>
+                    `;
 
-                    // Model
-                    const modelInput = document.getElementById('model');
+                    // Model (read-only)
                     const modelContainer = document.getElementById('modelContainer');
-                    modelInput.value = config.model;
-                    if (config.model_from_env) {
-                        modelInput.disabled = true;
-                        modelContainer.innerHTML = `
-                            <div class="env-badge">
-                                <span class="check">✓</span>
-                                <span>${config.model} (set via environment)</span>
-                            </div>
-                        `;
-                    }
+                    modelContainer.innerHTML = `
+                        <div class="env-badge">
+                            ${config.model_from_env ? '<span class="check">✓</span>' : ''}
+                            <span>${config.model}</span>
+                        </div>
+                    `;
 
-                    // API Key - special handling
+                    // API Key (read-only, masked for security)
                     const apiKeyContainer = document.getElementById('apiKeyContainer');
-                    if (config.api_key_from_env) {
-                        apiKeyContainer.innerHTML = `
-                            <div class="env-badge">
-                                <span class="check">✓</span>
-                                <span>Set via environment variable</span>
-                            </div>
-                        `;
-                    } else {
-                        apiKeyContainer.innerHTML = `
-                            <input type="password" id="apiKey" placeholder="Enter your API key">
-                        `;
-                    }
+                    apiKeyContainer.innerHTML = `
+                        <div class="env-badge">
+                            ${config.api_key_from_env ? '<span class="check">✓</span>' : ''}
+                            <span>${config.masked_api_key}</span>
+                        </div>
+                    `;
                 }
             } catch (error) {
                 console.error('Failed to load config:', error);
             }
         }
 
-        async function saveConfig() {
-            const statusEl = document.getElementById('configStatus');
-            statusEl.textContent = 'Saving...';
-            statusEl.style.color = 'var(--text-secondary)';
-
-            const config = {
-                story_count: parseInt(document.getElementById('storyCount')?.value) || null,
-                api_base_url: document.getElementById('apiBaseUrl')?.value || null,
-                model: document.getElementById('model')?.value || null,
-                api_key: document.getElementById('apiKey')?.value || null
-            };
-
-            try {
-                const response = await fetch('/api/config', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
-                });
-                const data = await response.json();
-                if (data.success) {
-                    statusEl.textContent = '✓ Configuration saved!';
-                    statusEl.style.color = '#4caf50';
-                    setTimeout(() => {
-                        closeModal();
-                        statusEl.textContent = '';
-                    }, 1000);
-                } else {
-                    statusEl.textContent = data.error || 'Failed to save configuration';
-                    statusEl.style.color = '#f44336';
-                }
-            } catch (error) {
-                statusEl.textContent = 'Error: ' + error.message;
-                statusEl.style.color = '#f44336';
-            }
-        }
-
         async function fetchStories() {
-            const btn = document.getElementById('fetchBtn');
-            const btnText = document.getElementById('fetchBtnText');
-            const statusEl = document.getElementById('statusBar');
+            const btn = document.getElementById('refreshBtn');
 
             btn.disabled = true;
-            btnText.innerHTML = '<span class="loading-spinner"></span>Fetching...';
-            statusEl.className = 'status-bar loading';
-            statusEl.textContent = 'Fetching stories from Hacker News and generating summaries...';
+            showToast(t('fetching'), 'loading', 0);
 
             try {
                 const response = await fetch('/api/fetch', { method: 'POST' });
                 const data = await response.json();
                 if (data.success) {
-                    statusEl.className = 'status-bar success';
-                    statusEl.textContent = `✓ Fetched ${data.data.stories_count} stories for ${data.data.episode.date}`;
+                    hideToast();
+                    showToast('✓ ' + t('fetchedSuccess', { count: data.data.stories_count, date: data.data.episode.date }), 'success');
                     await loadEpisodes();
                     await loadLatestEpisode();
                 } else {
-                    statusEl.className = 'status-bar error';
-                    statusEl.textContent = data.error || 'Failed to fetch stories';
+                    hideToast();
+                    showToast(data.error || 'Failed to fetch stories', 'error');
                 }
             } catch (error) {
-                statusEl.className = 'status-bar error';
-                statusEl.textContent = 'Error: ' + error.message;
+                hideToast();
+                showToast('Error: ' + error.message, 'error');
             } finally {
                 btn.disabled = false;
-                btnText.textContent = 'Fetch Stories';
             }
         }
 
@@ -875,8 +1026,8 @@
                     container.innerHTML = `
                         <div class="empty-state">
                             <div class="icon">📰</div>
-                            <p>No episodes found</p>
-                            <p style="font-size: 13px; margin-top: 8px;">Click "Fetch Stories" to create one</p>
+                            <p>${t('emptyNoEpisodes')}</p>
+                            <p style="font-size: 13px; margin-top: 8px;">${t('emptyCreateHint')}</p>
                         </div>
                     `;
                 }
@@ -884,7 +1035,7 @@
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="icon">⚠️</div>
-                        <p>Error loading episode</p>
+                        <p>${t('emptyError')}</p>
                         <p style="font-size: 13px; margin-top: 8px;">${escapeHtml(error.message)}</p>
                     </div>
                 `;
@@ -904,7 +1055,7 @@
                     container.innerHTML = `
                         <div class="empty-state">
                             <div class="icon">📭</div>
-                            <p>Episode not found</p>
+                            <p>${t('emptyNotFound')}</p>
                         </div>
                     `;
                 }
@@ -912,7 +1063,7 @@
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="icon">⚠️</div>
-                        <p>Error loading episode</p>
+                        <p>${t('emptyError')}</p>
                     </div>
                 `;
             }
@@ -921,36 +1072,148 @@
         function renderEpisode(episodeData) {
             const container = document.getElementById('storiesContainer');
             const episode = episodeData.episode;
-            const stories = episodeData.stories;
+            let stories = episodeData.stories;
 
-            document.getElementById('episodeDate').textContent = episode.date;
             selectedDate = episode.date;
+
+            // Store stories for refresh without API call
+            window.currentStories = stories;
+            window.currentEpisode = episode;
 
             if (!stories || stories.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="icon">📭</div>
-                        <p>No stories in this episode</p>
+                        <p>${t('emptyNoStories')}</p>
                     </div>
                 `;
                 return;
             }
 
-            container.innerHTML = stories.map((s, i) => `
-                <div class="story">
+            // Get clicked stories from localStorage
+            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
+            const clickedHnIds = new Set(clickedStories);
+
+            // Sort stories: unclicked first, clicked at the end
+            const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
+            const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
+            stories = [...unclickedStories, ...clickedStoriesList];
+
+            container.innerHTML = stories.map((s, i) => {
+                const isClicked = clickedHnIds.has(s.hn_id);
+                const clickedClass = isClicked ? 'clicked' : '';
+                return `
+                <div class="story ${clickedClass}" data-hn-id="${s.hn_id}">
                     <div class="story-title">
-                        <a href="${escapeHtml(s.url || '#')}" target="_blank">${i + 1}. ${escapeHtml(s.title)}</a>
+                        <a href="${escapeHtml(s.url || '#')}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
+                        <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
+                            ${isClicked ? '✓' : '📖'}
+                        </button>
                     </div>
                     <div class="story-meta">
                         ${s.score} points by ${escapeHtml(s.by)} |
                         <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
                     </div>
-                    ${s.summary ? `<div class="story-summary">${escapeHtml(s.summary)}</div>` : ''}
-                    ${s.summary_zh ? `<div class="story-summary-zh">${escapeHtml(s.summary_zh)}</div>` : ''}
+                    ${s.summary ? `<div class="story-summary"><strong>${t('summaryLabel')}:</strong> ${escapeHtml(s.summary)}</div>` : ''}
+                    ${s.summary_zh ? `<div class="story-summary-zh"><strong>${t('summaryZhLabel')}:</strong> ${escapeHtml(s.summary_zh)}</div>` : ''}
                 </div>
-            `).join('');
+            `}).join('');
 
             renderCalendar();
+        }
+
+        // Mark story as clicked and store in localStorage, then refresh list
+        function markStoryClicked(hnId) {
+            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
+            if (!clickedStories.includes(hnId)) {
+                clickedStories.push(hnId);
+                localStorage.setItem('clickedStories', JSON.stringify(clickedStories));
+                // Refresh the list to reorder stories (not reload page)
+                refreshStoriesList();
+            }
+        }
+
+        // Refresh the current stories list without fetching from API
+        function refreshStoriesList() {
+            const container = document.getElementById('storiesContainer');
+            const stories = window.currentStories || [];
+            if (stories.length === 0) return;
+
+            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
+            const clickedHnIds = new Set(clickedStories);
+
+            // Sort stories: unclicked first, clicked at the end
+            const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
+            const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
+            const sortedStories = [...unclickedStories, ...clickedStoriesList];
+
+            container.innerHTML = sortedStories.map((s, i) => {
+                const isClicked = clickedHnIds.has(s.hn_id);
+                const clickedClass = isClicked ? 'clicked' : '';
+                return `
+                <div class="story ${clickedClass}" data-hn-id="${s.hn_id}">
+                    <div class="story-title">
+                        <a href="${escapeHtml(s.url || '#')}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
+                        <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
+                            ${isClicked ? '✓' : '📖'}
+                        </button>
+                    </div>
+                    <div class="story-meta">
+                        ${s.score} points by ${escapeHtml(s.by)} |
+                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">discuss</a>
+                    </div>
+                    ${s.summary ? `<div class="story-summary"><strong>${t('summaryLabel')}:</strong> ${escapeHtml(s.summary)}</div>` : ''}
+                    ${s.summary_zh ? `<div class="story-summary-zh"><strong>${t('summaryZhLabel')}:</strong> ${escapeHtml(s.summary_zh)}</div>` : ''}
+                </div>
+            `}).join('');
+        }
+
+        // Mark a single story as read without opening the link
+        function markSingleStoryRead(hnId) {
+            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
+            if (!clickedStories.includes(hnId)) {
+                clickedStories.push(hnId);
+                localStorage.setItem('clickedStories', JSON.stringify(clickedStories));
+                refreshStoriesList();
+            }
+        }
+
+        // Mark all current stories as read
+        function markAllStoriesRead() {
+            const stories = window.currentStories || [];
+            if (stories.length === 0) return;
+
+            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
+            const clickedHnIds = new Set(clickedStories);
+
+            // Add all current stories' hn_ids to clicked
+            for (const s of stories) {
+                if (!clickedHnIds.has(s.hn_id)) {
+                    clickedStories.push(s.hn_id);
+                }
+            }
+
+            localStorage.setItem('clickedStories', JSON.stringify(clickedStories));
+            refreshStoriesList();
+            showToast(t('allMarkedRead'), 'success');
+        }
+
+        // Remove all read stories from clicked list
+        function removeAllReadStories() {
+            if (!confirm(t('confirmRemoveRead'))) return;
+
+            localStorage.setItem('clickedStories', '[]');
+            refreshStoriesList();
+            showToast(t('removed', { count: 'all read' }), 'success');
+        }
+
+        // Remove all stories from clicked list
+        function removeAllStories() {
+            if (!confirm(t('confirmRemoveAll'))) return;
+
+            localStorage.setItem('clickedStories', '[]');
+            refreshStoriesList();
+            showToast(t('removed', { count: 'all' }), 'success');
         }
 
         // Calendar Functions
@@ -961,9 +1224,9 @@
             const year = currentMonth.getFullYear();
             const month = currentMonth.getMonth();
 
-            title.textContent = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            title.textContent = currentMonth.toLocaleDateString(currentLang === 'zh' ? 'zh-CN' : 'en-US', { month: 'long', year: 'numeric' });
 
-            const dayHeaders = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+            const dayHeaders = currentLang === 'zh' ? ['日', '一', '二', '三', '四', '五', '六'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
             let html = dayHeaders.map(d => `<div class="calendar-day-header">${d}</div>`).join('');
 
             const firstDay = new Date(year, month, 1);

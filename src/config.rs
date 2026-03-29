@@ -8,6 +8,7 @@ pub const ENV_MODEL: &str = "HACKER_NEW_MODEL";
 pub const ENV_STORY_COUNT: &str = "HACKER_NEW_STORY_COUNT";
 pub const ENV_DATABASE_URL: &str = "HACKER_NEW_DATABASE_URL";
 pub const ENV_PORT: &str = "HACKER_NEW_PORT";
+pub const ENV_AUTO_UPDATE_INTERVAL: &str = "HACKER_NEW_AUTO_UPDATE_INTERVAL";
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -51,4 +52,13 @@ pub fn get_story_count_from_env() -> Option<i32> {
         .ok()
         .and_then(|s| s.parse().ok())
         .filter(|&n| n > 0)
+}
+
+/// Get auto_update_interval from environment variable
+/// Returns minutes between auto-updates. 0 means disabled.
+pub fn get_auto_update_interval_from_env() -> u32 {
+    env::var(ENV_AUTO_UPDATE_INTERVAL)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
 }
