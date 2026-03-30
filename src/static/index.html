@@ -720,11 +720,15 @@
                     <path d="M21 3v6h-6"/>
                 </svg>
             </button>
-            <button class="icon-btn" id="markAllReadBtn" title="Mark all as read" onclick="markAllStoriesRead()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="icon-btn" id="toggleReadBtn" title="Show only unread">
+                <svg id="iconShowAll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
                     <path d="M8 7h8M8 11h8M8 15h5"/>
+                </svg>
+                <svg id="iconShowOnlyUnread" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
                 </svg>
             </button>
             <button class="icon-btn" id="calendarBtn" title="Calendar">
@@ -921,6 +925,7 @@
         let selectedDate = null;
         let episodesWithDates = new Set();
         let currentLang = localStorage.getItem('lang') || 'en';
+        let showOnlyRead = localStorage.getItem('showOnlyRead') === 'true';
 
         // i18n messages
         const i18n = {
@@ -950,18 +955,18 @@
                 configSetViaDb: 'Set via database',
                 configDataManagement: 'Data Management',
                 markRead: 'Mark as read',
-                markAllRead: 'Mark all as read',
                 removeAllStories: 'Remove all stories',
                 removeAllReadStories: 'Remove all read stories',
                 confirmRemoveAll: 'Are you sure you want to remove all stories?',
                 confirmRemoveRead: 'Are you sure you want to remove all read stories?',
                 removed: 'Removed {count} stories',
-                allMarkedRead: 'All stories marked as read',
                 regeneratingSummary: 'Regenerating summary...',
                 summaryRegenerated: 'Summary regenerated successfully',
                 regenerateSummary: 'Regenerate summary',
                 pointsBy: '{score} points by {author}',
-                discuss: 'discuss'
+                discuss: 'discuss',
+                showAllStories: 'Show all stories',
+                showOnlyUnread: 'Show only unread'
             },
             zh: {
                 emptyNoEpisode: '暂无内容',
@@ -989,18 +994,18 @@
                 configSetViaDb: '通过数据库设置',
                 configDataManagement: '数据管理',
                 markRead: '标记已读',
-                markAllRead: '全部已读',
                 removeAllStories: '移除所有条目',
                 removeAllReadStories: '移除所有已读条目',
                 confirmRemoveAll: '确定要移除所有条目吗？',
                 confirmRemoveRead: '确定要移除所有已读条目吗？',
                 removed: '已移除 {count} 条故事',
-                allMarkedRead: '所有故事已标记为已读',
                 regeneratingSummary: '正在重新生成摘要...',
                 summaryRegenerated: '摘要已重新生成',
                 regenerateSummary: '重新生成摘要',
                 pointsBy: '{score} 分，作者：{author}',
-                discuss: '评论'
+                discuss: '评论',
+                showAllStories: '显示全部条目',
+                showOnlyUnread: '只显示未读'
             }
         };
 
@@ -1070,6 +1075,34 @@
             }
         }
 
+        // Show Only Read Toggle
+        function initShowOnlyRead() {
+            showOnlyRead = localStorage.getItem('showOnlyRead') === 'true';
+            updateShowOnlyReadIcon();
+        }
+
+        function toggleShowOnlyRead() {
+            showOnlyRead = !showOnlyRead;
+            localStorage.setItem('showOnlyRead', showOnlyRead);
+            updateShowOnlyReadIcon();
+            refreshStoriesList();
+        }
+
+        function updateShowOnlyReadIcon() {
+            const showAllIcon = document.getElementById('iconShowAll');
+            const showOnlyUnreadIcon = document.getElementById('iconShowOnlyUnread');
+            const btn = document.getElementById('toggleReadBtn');
+            if (showOnlyRead) {
+                showAllIcon.style.display = 'none';
+                showOnlyUnreadIcon.style.display = 'block';
+                btn.title = t('showAllStories');
+            } else {
+                showAllIcon.style.display = 'block';
+                showOnlyUnreadIcon.style.display = 'none';
+                btn.title = t('showOnlyUnread');
+            }
+        }
+
         // Toast Notification
         function showToast(message, type = 'success', duration = 3000) {
             const toast = document.getElementById('toast');
@@ -1123,9 +1156,11 @@
         document.addEventListener('DOMContentLoaded', async () => {
             initTheme();
             initLanguage();
+            initShowOnlyRead();
 
             document.getElementById('themeToggle').addEventListener('click', toggleTheme);
             document.getElementById('languageToggle').addEventListener('click', toggleLanguage);
+            document.getElementById('toggleReadBtn').addEventListener('click', toggleShowOnlyRead);
             document.getElementById('configBtn').addEventListener('click', openModal);
             document.getElementById('calendarBtn').addEventListener('click', openCalendarModal);
 
@@ -1315,9 +1350,18 @@
             // Sort stories: unclicked first, clicked at the end
             const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
             const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
-            const sortedStories = [...unclickedStories, ...clickedStoriesList];
 
-            container.innerHTML = sortedStories.map((s, i) => {
+            // Filter based on showOnlyRead state
+            let displayStories;
+            if (showOnlyRead) {
+                // Only show unread (unclicked) stories
+                displayStories = unclickedStories;
+            } else {
+                // Show all stories with unclicked first
+                displayStories = [...unclickedStories, ...clickedStoriesList];
+            }
+
+            container.innerHTML = displayStories.map((s, i) => {
                 const isClicked = clickedHnIds.has(s.hn_id);
                 const clickedClass = isClicked ? 'clicked' : '';
                 const hasSummary = (currentLang === 'en' && s.summary) || (currentLang === 'zh' && s.summary_zh);
@@ -1494,9 +1538,18 @@
             // Sort stories: unclicked first, clicked at the end
             const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
             const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
-            stories = [...unclickedStories, ...clickedStoriesList];
 
-            container.innerHTML = stories.map((s, i) => {
+            // Filter based on showOnlyRead state
+            let displayStories;
+            if (showOnlyRead) {
+                // Only show unread (unclicked) stories
+                displayStories = unclickedStories;
+            } else {
+                // Show all stories with unclicked first
+                displayStories = [...unclickedStories, ...clickedStoriesList];
+            }
+
+            container.innerHTML = displayStories.map((s, i) => {
                 const isClicked = clickedHnIds.has(s.hn_id);
                 const clickedClass = isClicked ? 'clicked' : '';
                 return `
@@ -1548,9 +1601,18 @@
             // Sort stories: unclicked first, clicked at the end
             const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
             const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
-            const sortedStories = [...unclickedStories, ...clickedStoriesList];
 
-            container.innerHTML = sortedStories.map((s, i) => {
+            // Filter based on showOnlyRead state
+            let displayStories;
+            if (showOnlyRead) {
+                // Only show unread (unclicked) stories
+                displayStories = unclickedStories;
+            } else {
+                // Show all stories with unclicked first
+                displayStories = [...unclickedStories, ...clickedStoriesList];
+            }
+
+            container.innerHTML = displayStories.map((s, i) => {
                 const isClicked = clickedHnIds.has(s.hn_id);
                 const clickedClass = isClicked ? 'clicked' : '';
                 return `
@@ -1587,26 +1649,6 @@
                 localStorage.setItem('clickedStories', JSON.stringify(clickedStories));
                 refreshStoriesList();
             }
-        }
-
-        // Mark all current stories as read
-        function markAllStoriesRead() {
-            const stories = window.currentStories || [];
-            if (stories.length === 0) return;
-
-            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
-            const clickedHnIds = new Set(clickedStories);
-
-            // Add all current stories' hn_ids to clicked
-            for (const s of stories) {
-                if (!clickedHnIds.has(s.hn_id)) {
-                    clickedStories.push(s.hn_id);
-                }
-            }
-
-            localStorage.setItem('clickedStories', JSON.stringify(clickedStories));
-            refreshStoriesList();
-            showToast(t('allMarkedRead'), 'success');
         }
 
         // Remove all read stories from clicked list AND from database for current episode
