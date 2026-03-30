@@ -1,12 +1,12 @@
 use axum::{
+    Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{
-        sse::{Event, KeepAlive, Sse},
         Json,
+        sse::{Event, KeepAlive, Sse},
     },
     routing::{delete, get, post, put},
-    Router,
 };
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
@@ -14,13 +14,12 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio_stream::StreamExt as _;
 
+use crate::config::{
+    get_llm_no_stream_from_env, get_llm_user_agent_from_env, get_search_keywords_from_env,
+};
 use crate::db::{self, models::EpisodeWithStories};
 use crate::hn::api::HnClient;
 use crate::llm::client::LlmClient;
-use crate::config::{
-    get_search_keywords_from_env, get_llm_no_stream_from_env, get_llm_no_llm_proxy_from_env,
-    get_llm_user_agent_from_env,
-};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,13 +31,19 @@ pub fn episode_routes() -> Router<Arc<AppState>> {
         .route("/api/episode/latest", get(get_latest_episode))
         .route("/api/episode/{date}", get(get_episode_by_date))
         .route("/api/episode/{date}", delete(delete_episode_by_date))
-        .route("/api/episode/{date}/stories", delete(delete_episode_stories))
+        .route(
+            "/api/episode/{date}/stories",
+            delete(delete_episode_stories),
+        )
         .route("/api/fetch", post(fetch_stories))
         .route("/api/fetch/stream", get(fetch_stories_stream))
         .route("/api/stories", get(get_all_stories))
         .route("/api/stories", delete(delete_all_stories))
         .route("/api/stories/read", delete(delete_read_stories))
-        .route("/api/story/{hn_id}/regenerate", put(regenerate_story_summary))
+        .route(
+            "/api/story/{hn_id}/regenerate",
+            put(regenerate_story_summary),
+        )
         .route("/api/episodes", get(get_episodes_list))
 }
 
@@ -69,7 +74,10 @@ impl<T: Serialize> ApiResponse<T> {
 
 async fn get_latest_episode(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ApiResponse<EpisodeWithStories>>, (StatusCode, Json<ApiResponse<EpisodeWithStories>>)> {
+) -> Result<
+    Json<ApiResponse<EpisodeWithStories>>,
+    (StatusCode, Json<ApiResponse<EpisodeWithStories>>),
+> {
     match db::get_latest_episode(&state.pool).await {
         Ok(Some(episode)) => {
             let stories = db::get_stories_by_episode(&state.pool, episode.id)
@@ -80,17 +88,29 @@ async fn get_latest_episode(
                         Json(ApiResponse::error(&e.to_string())),
                     )
                 })?;
-            Ok(Json(ApiResponse::success(EpisodeWithStories { episode, stories })))
+            Ok(Json(ApiResponse::success(EpisodeWithStories {
+                episode,
+                stories,
+            })))
         }
-        Ok(None) => Err((StatusCode::NOT_FOUND, Json(ApiResponse::error("No episodes found")))),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(&e.to_string())))),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error("No episodes found")),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )),
     }
 }
 
 async fn get_episode_by_date(
     State(state): State<Arc<AppState>>,
     Path(date): Path<String>,
-) -> Result<Json<ApiResponse<EpisodeWithStories>>, (StatusCode, Json<ApiResponse<EpisodeWithStories>>)> {
+) -> Result<
+    Json<ApiResponse<EpisodeWithStories>>,
+    (StatusCode, Json<ApiResponse<EpisodeWithStories>>),
+> {
     match db::get_episode_by_date(&state.pool, &date).await {
         Ok(Some(episode)) => {
             let stories = db::get_stories_by_episode(&state.pool, episode.id)
@@ -101,10 +121,19 @@ async fn get_episode_by_date(
                         Json(ApiResponse::error(&e.to_string())),
                     )
                 })?;
-            Ok(Json(ApiResponse::success(EpisodeWithStories { episode, stories })))
+            Ok(Json(ApiResponse::success(EpisodeWithStories {
+                episode,
+                stories,
+            })))
         }
-        Ok(None) => Err((StatusCode::NOT_FOUND, Json(ApiResponse::error("Episode not found")))),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(&e.to_string())))),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error("Episode not found")),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )),
     }
 }
 
@@ -144,14 +173,12 @@ async fn fetch_stories(
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
     // Create or get episode
-    let episode_id = db::create_episode(&state.pool, &today)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(&e.to_string())),
-            )
-        })?;
+    let episode_id = db::create_episode(&state.pool, &today).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&e.to_string())),
+        )
+    })?;
 
     // Get existing hn_ids for this episode to avoid duplicates
     let existing_hn_ids = db::get_existing_hn_ids(&state.pool, episode_id)
@@ -163,14 +190,21 @@ async fn fetch_stories(
             )
         })?;
     let existing_ids_set: std::collections::HashSet<i64> = existing_hn_ids.into_iter().collect();
-    tracing::info!("Found {} existing stories for episode {}", existing_ids_set.len(), episode_id);
+    tracing::info!(
+        "Found {} existing stories for episode {}",
+        existing_ids_set.len(),
+        episode_id
+    );
 
     // Fetch top stories from HN
     let hn_client = HnClient::new();
     let top_ids = hn_client.fetch_top_stories().await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(&format!("Failed to fetch from HN: {}", e))),
+            Json(ApiResponse::error(&format!(
+                "Failed to fetch from HN: {}",
+                e
+            ))),
         )
     })?;
 
@@ -181,14 +215,21 @@ async fn fetch_stories(
         .take(config.story_count as usize)
         .collect();
 
-    tracing::info!("Fetching {} new top stories (filtered out {} duplicates)", ids.len(), existing_ids_set.len());
+    tracing::info!(
+        "Fetching {} new top stories (filtered out {} duplicates)",
+        ids.len(),
+        existing_ids_set.len()
+    );
 
     // Fetch top stories details (tag="top")
     let top_stories = if !ids.is_empty() {
         hn_client.fetch_stories(&ids).await.map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(&format!("Failed to fetch stories: {}", e))),
+                Json(ApiResponse::error(&format!(
+                    "Failed to fetch stories: {}",
+                    e
+                ))),
             )
         })?
     } else {
@@ -205,12 +246,24 @@ async fn fetch_stories(
             match hn_client.search_newest(&kw, 10).await {
                 Ok(s) => {
                     // Filter out existing stories
-                    let filtered: Vec<_> = s.into_iter().filter(|s| !existing_ids_set.contains(&s.id)).collect();
-                    tracing::info!("Found {} stories for keyword '{}' ({} new)", filtered.len(), kw, filtered.len());
+                    let filtered: Vec<_> = s
+                        .into_iter()
+                        .filter(|s| !existing_ids_set.contains(&s.id))
+                        .collect();
+                    tracing::info!(
+                        "Found {} stories for keyword '{}' ({} new)",
+                        filtered.len(),
+                        kw,
+                        filtered.len()
+                    );
                     stories.extend(filtered);
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to search Algolia for '{}': {}. Skipping this keyword.", kw, e);
+                    tracing::warn!(
+                        "Failed to search Algolia for '{}': {}. Skipping this keyword.",
+                        kw,
+                        e
+                    );
                     // Continue with next keyword instead of failing
                     continue;
                 }
@@ -230,7 +283,12 @@ async fn fetch_stories(
         }
     }
 
-    tracing::info!("Total {} unique stories to process ({} top + {} search unique)", all_stories.len(), top_ids_set.len(), all_stories.len() - top_ids_set.len());
+    tracing::info!(
+        "Total {} unique stories to process ({} top + {} search unique)",
+        all_stories.len(),
+        top_ids_set.len(),
+        all_stories.len() - top_ids_set.len()
+    );
 
     if all_stories.is_empty() {
         // No new stories to fetch
@@ -256,13 +314,16 @@ async fn fetch_stories(
     }
 
     // Initialize LLM client
-    tracing::info!("Initializing LLM client with base_url: {}, model: {}", config.api_base_url, config.model);
+    tracing::info!(
+        "Initializing LLM client with base_url: {}, model: {}",
+        config.api_base_url,
+        config.model
+    );
     let llm_client = LlmClient::new(
         config.api_key.clone(),
         config.api_base_url.clone(),
         config.model.clone(),
         get_llm_no_stream_from_env(),
-        get_llm_no_llm_proxy_from_env(),
         get_llm_user_agent_from_env(),
     );
 
@@ -277,8 +338,16 @@ async fn fetch_stories(
         story.episode_id = episode_id;
 
         // Generate summary based on language preference
-        tracing::info!("Generating {} summary for story {}: {}", lang, story.hn_id, story.title);
-        match llm_client.summarize(&story.title, story.url.as_deref(), lang).await {
+        tracing::info!(
+            "Generating {} summary for story {}: {}",
+            lang,
+            story.hn_id,
+            story.title
+        );
+        match llm_client
+            .summarize(&story.title, story.url.as_deref(), lang)
+            .await
+        {
             Ok((summary, summary_zh)) => {
                 tracing::info!("Successfully generated summary for story {}", story.hn_id);
                 story.summary = summary;
@@ -315,7 +384,10 @@ async fn fetch_stories(
     if stories_count == 0 && first_error.is_some() {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(&format!("LLM API error: {}", first_error.unwrap()))),
+            Json(ApiResponse::error(&format!(
+                "LLM API error: {}",
+                first_error.unwrap()
+            ))),
         ));
     }
 
@@ -343,7 +415,10 @@ async fn fetch_stories(
 
 async fn get_all_stories(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ApiResponse<Vec<crate::db::models::Story>>>, (StatusCode, Json<ApiResponse<Vec<crate::db::models::Story>>>)> {
+) -> Result<
+    Json<ApiResponse<Vec<crate::db::models::Story>>>,
+    (StatusCode, Json<ApiResponse<Vec<crate::db::models::Story>>>),
+> {
     let stories = db::get_all_stories(&state.pool).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -355,7 +430,13 @@ async fn get_all_stories(
 
 async fn get_episodes_list(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ApiResponse<Vec<crate::db::models::Episode>>>, (StatusCode, Json<ApiResponse<Vec<crate::db::models::Episode>>>)> {
+) -> Result<
+    Json<ApiResponse<Vec<crate::db::models::Episode>>>,
+    (
+        StatusCode,
+        Json<ApiResponse<Vec<crate::db::models::Episode>>>,
+    ),
+> {
     let episodes = db::get_episodes(&state.pool).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -388,12 +469,14 @@ async fn delete_episode_by_date(
     State(state): State<Arc<AppState>>,
     Path(date): Path<String>,
 ) -> Result<Json<ApiResponse<DeleteResponse>>, (StatusCode, Json<ApiResponse<DeleteResponse>>)> {
-    let deleted_count = db::delete_episode_by_date(&state.pool, &date).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(&e.to_string())),
-        )
-    })?;
+    let deleted_count = db::delete_episode_by_date(&state.pool, &date)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?;
     Ok(Json(ApiResponse::success(DeleteResponse { deleted_count })))
 }
 
@@ -402,24 +485,31 @@ async fn delete_episode_stories(
     State(state): State<Arc<AppState>>,
     Path(date): Path<String>,
 ) -> Result<Json<ApiResponse<DeleteResponse>>, (StatusCode, Json<ApiResponse<DeleteResponse>>)> {
-    let episode = db::get_episode_by_date(&state.pool, &date).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(&e.to_string())),
-        )
-    })?;
+    let episode = db::get_episode_by_date(&state.pool, &date)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?;
 
     match episode {
         Some(ep) => {
-            let deleted_count = db::delete_stories_by_episode(&state.pool, ep.id).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::error(&e.to_string())),
-                )
-            })?;
+            let deleted_count = db::delete_stories_by_episode(&state.pool, ep.id)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::error(&e.to_string())),
+                    )
+                })?;
             Ok(Json(ApiResponse::success(DeleteResponse { deleted_count })))
         }
-        None => Err((StatusCode::NOT_FOUND, Json(ApiResponse::error("Episode not found"))))
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error("Episode not found")),
+        )),
     }
 }
 
@@ -438,14 +528,19 @@ async fn regenerate_story_summary(
     State(state): State<Arc<AppState>>,
     Path(hn_id): Path<i64>,
     Json(payload): Json<RegenerateRequest>,
-) -> Result<Json<ApiResponse<RegenerateResponse>>, (StatusCode, Json<ApiResponse<RegenerateResponse>>)> {
+) -> Result<
+    Json<ApiResponse<RegenerateResponse>>,
+    (StatusCode, Json<ApiResponse<RegenerateResponse>>),
+> {
     // Get configuration
-    let config = db::get_config_with_env_overrides(&state.pool).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(&e.to_string())),
-        )
-    })?;
+    let config = db::get_config_with_env_overrides(&state.pool)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?;
 
     if config.api_key.is_empty() {
         return Err((
@@ -455,12 +550,14 @@ async fn regenerate_story_summary(
     }
 
     // Get story by hn_id
-    let story = db::get_story_by_hn_id(&state.pool, hn_id).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(&e.to_string())),
-        )
-    })?;
+    let story = db::get_story_by_hn_id(&state.pool, hn_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?;
 
     // Determine language for summary generation
     let lang = payload.lang.as_deref().unwrap_or("zh");
@@ -473,32 +570,53 @@ async fn regenerate_story_summary(
                 config.api_base_url.clone(),
                 config.model.clone(),
                 get_llm_no_stream_from_env(),
-                get_llm_no_llm_proxy_from_env(),
                 get_llm_user_agent_from_env(),
             );
 
             // Regenerate summary based on language preference
-            tracing::info!("Regenerating {} summary for story {}: {}", lang, s.hn_id, s.title);
+            tracing::info!(
+                "Regenerating {} summary for story {}: {}",
+                lang,
+                s.hn_id,
+                s.title
+            );
             let (summary, summary_zh) = llm_client
                 .summarize(&s.title, s.url.as_deref(), lang)
                 .await
                 .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::error(&format!("Failed to regenerate summary: {}", e))),
+                        Json(ApiResponse::error(&format!(
+                            "Failed to regenerate summary: {}",
+                            e
+                        ))),
                     )
                 })?;
 
             // Update story in database - use the appropriate function based on language
             if lang == "en" {
-                db::update_story_summary_by_lang(&state.pool, s.id, lang, &summary.unwrap_or_default()).await.map_err(|e| {
+                db::update_story_summary_by_lang(
+                    &state.pool,
+                    s.id,
+                    lang,
+                    &summary.unwrap_or_default(),
+                )
+                .await
+                .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::error(&e.to_string())),
                     )
                 })?;
             } else {
-                db::update_story_summary_by_lang(&state.pool, s.id, lang, &summary_zh.unwrap_or_default()).await.map_err(|e| {
+                db::update_story_summary_by_lang(
+                    &state.pool,
+                    s.id,
+                    lang,
+                    &summary_zh.unwrap_or_default(),
+                )
+                .await
+                .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::error(&e.to_string())),
@@ -507,16 +625,24 @@ async fn regenerate_story_summary(
             }
 
             // Return updated story
-            let updated_story = db::get_story_by_hn_id(&state.pool, hn_id).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::error(&e.to_string())),
-                )
-            })?.unwrap();
+            let updated_story = db::get_story_by_hn_id(&state.pool, hn_id)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::error(&e.to_string())),
+                    )
+                })?
+                .unwrap();
 
-            Ok(Json(ApiResponse::success(RegenerateResponse { story: updated_story })))
+            Ok(Json(ApiResponse::success(RegenerateResponse {
+                story: updated_story,
+            })))
         }
-        None => Err((StatusCode::NOT_FOUND, Json(ApiResponse::error("Story not found"))))
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error("Story not found")),
+        )),
     }
 }
 
@@ -531,15 +657,19 @@ async fn delete_read_stories(
     Json(payload): Json<DeleteReadRequest>,
 ) -> Result<Json<ApiResponse<DeleteResponse>>, (StatusCode, Json<ApiResponse<DeleteResponse>>)> {
     if payload.hn_ids.is_empty() {
-        return Ok(Json(ApiResponse::success(DeleteResponse { deleted_count: 0 })));
+        return Ok(Json(ApiResponse::success(DeleteResponse {
+            deleted_count: 0,
+        })));
     }
 
-    let deleted_count = db::delete_stories_by_hn_ids(&state.pool, &payload.hn_ids).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(&e.to_string())),
-        )
-    })?;
+    let deleted_count = db::delete_stories_by_hn_ids(&state.pool, &payload.hn_ids)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(&e.to_string())),
+            )
+        })?;
 
     Ok(Json(ApiResponse::success(DeleteResponse { deleted_count })))
 }
@@ -551,7 +681,11 @@ enum SseEvent {
     #[serde(rename = "story_added")]
     StoryAdded { story: crate::db::models::Story },
     #[serde(rename = "summary_done")]
-    SummaryDone { hn_id: i64, summary: Option<String>, summary_zh: Option<String> },
+    SummaryDone {
+        hn_id: i64,
+        summary: Option<String>,
+        summary_zh: Option<String>,
+    },
     #[serde(rename = "summary_error")]
     SummaryError { hn_id: i64, error: String },
     #[serde(rename = "done")]
@@ -582,11 +716,10 @@ async fn fetch_stories_stream(
     });
 
     // Convert the receiver to a stream and map to SSE events
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx)
-        .map(|event| {
-            let json = serde_json::to_string(&event)?;
-            Ok(Event::default().data(json))
-        });
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|event| {
+        let json = serde_json::to_string(&event)?;
+        Ok(Event::default().data(json))
+    });
 
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
@@ -612,7 +745,11 @@ async fn fetch_stories_stream_task(
     // Get existing hn_ids for this episode to avoid duplicates
     let existing_hn_ids = db::get_existing_hn_ids(&pool, episode_id).await?;
     let existing_ids_set: std::collections::HashSet<i64> = existing_hn_ids.into_iter().collect();
-    tracing::info!("Found {} existing stories for episode {}", existing_ids_set.len(), episode_id);
+    tracing::info!(
+        "Found {} existing stories for episode {}",
+        existing_ids_set.len(),
+        episode_id
+    );
 
     // Fetch top stories from HN
     let hn_client = HnClient::new();
@@ -625,7 +762,11 @@ async fn fetch_stories_stream_task(
         .take(config.story_count as usize)
         .collect();
 
-    tracing::info!("Fetching {} new top stories (filtered out {} duplicates)", ids.len(), existing_ids_set.len());
+    tracing::info!(
+        "Fetching {} new top stories (filtered out {} duplicates)",
+        ids.len(),
+        existing_ids_set.len()
+    );
 
     // Fetch top stories details (tag="top")
     let top_stories = if !ids.is_empty() {
@@ -643,12 +784,24 @@ async fn fetch_stories_stream_task(
             // Use error handling instead of stopping on failure
             match hn_client.search_newest(&kw, 10).await {
                 Ok(s) => {
-                    let filtered: Vec<_> = s.into_iter().filter(|s| !existing_ids_set.contains(&s.id)).collect();
-                    tracing::info!("Found {} stories for keyword '{}' ({} new)", filtered.len(), kw, filtered.len());
+                    let filtered: Vec<_> = s
+                        .into_iter()
+                        .filter(|s| !existing_ids_set.contains(&s.id))
+                        .collect();
+                    tracing::info!(
+                        "Found {} stories for keyword '{}' ({} new)",
+                        filtered.len(),
+                        kw,
+                        filtered.len()
+                    );
                     stories.extend(filtered);
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to search Algolia for '{}': {}. Skipping this keyword.", kw, e);
+                    tracing::warn!(
+                        "Failed to search Algolia for '{}': {}. Skipping this keyword.",
+                        kw,
+                        e
+                    );
                     continue;
                 }
             }
@@ -675,13 +828,16 @@ async fn fetch_stories_stream_task(
     }
 
     // Initialize LLM client
-    tracing::info!("Initializing LLM client with base_url: {}, model: {}", config.api_base_url, config.model);
+    tracing::info!(
+        "Initializing LLM client with base_url: {}, model: {}",
+        config.api_base_url,
+        config.model
+    );
     let llm_client = LlmClient::new(
         config.api_key.clone(),
         config.api_base_url.clone(),
         config.model.clone(),
         get_llm_no_stream_from_env(),
-        get_llm_no_llm_proxy_from_env(),
         get_llm_user_agent_from_env(),
     );
 
@@ -717,29 +873,59 @@ async fn fetch_stories_stream_task(
                 let story_id_clone = *story_id;
 
                 async move {
-                    tracing::info!("Generating {} summary for story {}: {}", lang, story_clone.hn_id, story_clone.title);
-                    match llm_client.summarize(&story_clone.title, story_clone.url.as_deref(), &lang).await {
+                    tracing::info!(
+                        "Generating {} summary for story {}: {}",
+                        lang,
+                        story_clone.hn_id,
+                        story_clone.title
+                    );
+                    match llm_client
+                        .summarize(&story_clone.title, story_clone.url.as_deref(), &lang)
+                        .await
+                    {
                         Ok((summary, summary_zh)) => {
-                            tracing::info!("Successfully generated summary for story {}", story_clone.hn_id);
+                            tracing::info!(
+                                "Successfully generated summary for story {}",
+                                story_clone.hn_id
+                            );
                             // Update database
-                            if let Err(e) = db::update_story_summary(&pool, story_id_clone, summary.as_deref(), summary_zh.as_deref()).await {
-                                tracing::error!("Failed to update summary for story {}: {}", story_clone.hn_id, e);
+                            if let Err(e) = db::update_story_summary(
+                                &pool,
+                                story_id_clone,
+                                summary.as_deref(),
+                                summary_zh.as_deref(),
+                            )
+                            .await
+                            {
+                                tracing::error!(
+                                    "Failed to update summary for story {}: {}",
+                                    story_clone.hn_id,
+                                    e
+                                );
                             }
                             // Send summary_done event
                             tx.send(SseEvent::SummaryDone {
                                 hn_id: story_clone.hn_id,
                                 summary,
                                 summary_zh,
-                            }).await.ok();
+                            })
+                            .await
+                            .ok();
                             true
                         }
                         Err(e) => {
-                            tracing::error!("Failed to summarize story {}: {}", story_clone.hn_id, e);
+                            tracing::error!(
+                                "Failed to summarize story {}: {}",
+                                story_clone.hn_id,
+                                e
+                            );
                             // Send summary_error event
                             tx.send(SseEvent::SummaryError {
                                 hn_id: story_clone.hn_id,
                                 error: e.to_string(),
-                            }).await.ok();
+                            })
+                            .await
+                            .ok();
                             false
                         }
                     }
@@ -757,3 +943,4 @@ async fn fetch_stories_stream_task(
 
     Ok(())
 }
+

@@ -8,7 +8,6 @@ pub struct LlmClient {
     base_url: String,
     model: String,
     no_stream: Option<bool>,
-    no_llm_proxy: Option<bool>,
     user_agent: Option<String>,
 }
 
@@ -18,7 +17,6 @@ impl LlmClient {
         base_url: String,
         model: String,
         no_stream: Option<bool>,
-        no_llm_proxy: Option<bool>,
         user_agent: Option<String>,
     ) -> Self {
         Self {
@@ -26,7 +24,6 @@ impl LlmClient {
             base_url,
             model,
             no_stream,
-            no_llm_proxy,
             user_agent,
         }
     }
@@ -85,7 +82,6 @@ impl LlmClient {
             api_key: self.api_key.clone(),
             temperature: Some(0.7),
             no_stream: self.no_stream,
-            no_llm_proxy: self.no_llm_proxy,
             user_agent: self.user_agent.clone(),
         };
 

@@ -71,10 +71,6 @@ impl Chat {
     pub async fn start(self) -> Result<()> {
         let mut client_builder = reqwest::Client::builder();
 
-        if self.config.no_llm_proxy.unwrap_or(false) {
-            client_builder = client_builder.no_proxy();
-        }
-
         if let Some(ref ua) = self.config.user_agent {
             client_builder = client_builder.user_agent(ua);
         }

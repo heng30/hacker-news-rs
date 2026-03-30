@@ -1,14 +1,15 @@
 pub mod models;
 
+use crate::{
+    config::{
+        get_api_key_from_env, get_base_url_from_env, get_model_from_env, get_story_count_from_env,
+    },
+    db::models::{Config, Episode, Story},
+};
 use anyhow::Result;
 use sqlx::{Row, SqlitePool};
-use crate::db::models::{Config, Episode, Story};
-use crate::config::{
-    get_api_key_from_env, get_base_url_from_env, get_model_from_env, get_story_count_from_env
-};
 
 pub async fn init_db(pool: &SqlitePool) -> Result<()> {
-    // Create tables
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS config (
@@ -44,7 +45,6 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Insert default config values if they don't exist
     let defaults = [
         ("story_count", "30"),
         ("api_base_url", "https://api.openai.com/v1"),
@@ -95,15 +95,10 @@ pub async fn get_config(pool: &SqlitePool) -> Result<Config> {
 pub async fn get_config_with_env_overrides(pool: &SqlitePool) -> Result<Config> {
     let config = get_config(pool).await?;
 
-    // Apply environment variable overrides
     let config = Config {
-        // API key from env takes precedence (sensitive, not stored in DB)
         api_key: get_api_key_from_env().unwrap_or(config.api_key),
-        // Base URL can be overridden by env
         api_base_url: get_base_url_from_env().unwrap_or(config.api_base_url),
-        // Model can be overridden by env
         model: get_model_from_env().unwrap_or(config.model),
-        // Story count can be overridden by env
         story_count: get_story_count_from_env().unwrap_or(config.story_count),
     };
 
@@ -232,12 +227,10 @@ pub async fn get_all_stories(pool: &SqlitePool) -> Result<Vec<Story>> {
 
 /// Get existing hn_ids for a specific episode to avoid duplicates
 pub async fn get_existing_hn_ids(pool: &SqlitePool, episode_id: i64) -> Result<Vec<i64>> {
-    let rows: Vec<(i64,)> = sqlx::query_as(
-        "SELECT hn_id FROM stories WHERE episode_id = ?1",
-    )
-    .bind(episode_id)
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<(i64,)> = sqlx::query_as("SELECT hn_id FROM stories WHERE episode_id = ?1")
+        .bind(episode_id)
+        .fetch_all(pool)
+        .await?;
 
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
@@ -255,7 +248,12 @@ pub async fn get_story_by_hn_id(pool: &SqlitePool, hn_id: i64) -> Result<Option<
 }
 
 /// Update summary for a specific language only, preserving the other language's summary
-pub async fn update_story_summary_by_lang(pool: &SqlitePool, story_id: i64, lang: &str, summary: &str) -> Result<()> {
+pub async fn update_story_summary_by_lang(
+    pool: &SqlitePool,
+    story_id: i64,
+    lang: &str,
+    summary: &str,
+) -> Result<()> {
     if lang == "en" {
         sqlx::query(
             r#"
@@ -284,7 +282,12 @@ pub async fn update_story_summary_by_lang(pool: &SqlitePool, story_id: i64, lang
 }
 
 /// Update both summaries for a story
-pub async fn update_story_summary(pool: &SqlitePool, story_id: i64, summary: Option<&str>, summary_zh: Option<&str>) -> Result<()> {
+pub async fn update_story_summary(
+    pool: &SqlitePool,
+    story_id: i64,
+    summary: Option<&str>,
+    summary_zh: Option<&str>,
+) -> Result<()> {
     sqlx::query(
         r#"
         UPDATE stories SET summary = ?1, summary_zh = ?2, fetched_at = datetime('now')
@@ -302,14 +305,10 @@ pub async fn update_story_summary(pool: &SqlitePool, story_id: i64, summary: Opt
 
 /// Delete all stories from database and return count of deleted rows
 pub async fn delete_all_stories(pool: &SqlitePool) -> Result<usize> {
-    let result = sqlx::query("DELETE FROM stories")
-        .execute(pool)
-        .await?;
+    let result = sqlx::query("DELETE FROM stories").execute(pool).await?;
 
     // Also delete all episodes
-    sqlx::query("DELETE FROM episodes")
-        .execute(pool)
-        .await?;
+    sqlx::query("DELETE FROM episodes").execute(pool).await?;
 
     Ok(result.rows_affected() as usize)
 }
@@ -335,7 +334,7 @@ pub async fn delete_episode_by_date(pool: &SqlitePool, date: &str) -> Result<usi
 
             Ok(stories_result.rows_affected() as usize)
         }
-        None => Ok(0)
+        None => Ok(0),
     }
 }
 
@@ -372,3 +371,4 @@ pub async fn delete_stories_by_hn_ids(pool: &SqlitePool, hn_ids: &[i64]) -> Resu
 
     Ok(result.rows_affected() as usize)
 }
+
