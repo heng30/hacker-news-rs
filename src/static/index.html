@@ -1105,15 +1105,18 @@
         }
 
         // Toast Notification
-        function showToast(message, type = 'success', duration = 3000) {
+        function showToast(message, type = 'success', duration = null) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
             toast.className = `toast ${type} show`;
 
-            if (duration > 0) {
+            // Auto-set duration based on type if not specified
+            const actualDuration = duration ?? (type === 'error' ? 5000 : 3000);
+
+            if (actualDuration > 0) {
                 setTimeout(() => {
                     toast.classList.remove('show');
-                }, duration);
+                }, actualDuration);
             }
         }
 
