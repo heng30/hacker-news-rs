@@ -1,23 +1,71 @@
-pub mod models;
-
-use crate::{
-    config::{
-        get_api_key_from_env, get_base_url_from_env, get_model_from_env, get_story_count_from_env,
-    },
-    db::models::{Config, Episode, Story},
-};
 use anyhow::Result;
-use sqlx::{Row, SqlitePool};
+use serde::{Deserialize, Serialize};
+use sqlx::{FromRow, Row, SqlitePool};
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Episode {
+    pub id: i64,
+    pub date: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Story {
+    pub id: i64,
+    pub episode_id: i64,
+    pub hn_id: i64,
+    pub title: String,
+    pub url: Option<String>,
+    pub by: String,
+    pub score: i64,
+    pub time: i64,
+    pub summary: Option<String>,
+    pub summary_zh: Option<String>,
+    pub fetched_at: String,
+    pub tag: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HnStory {
+    pub id: i64,
+    pub title: String,
+    pub url: Option<String>,
+    pub by: String,
+    pub score: i64,
+    pub time: i64,
+    pub tag: String,
+}
+
+impl From<HnStory> for Story {
+    fn from(hn: HnStory) -> Self {
+        let now = chrono::Utc::now().to_rfc3339();
+        Self {
+            id: 0,
+            episode_id: 0,
+            hn_id: hn.id,
+            title: hn.title,
+            url: hn.url,
+            by: hn.by,
+            score: hn.score,
+            time: hn.time,
+            summary: None,
+            summary_zh: None,
+            fetched_at: now,
+            tag: hn.tag,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EpisodeWithStories {
+    pub episode: Episode,
+    pub stories: Vec<Story>,
+}
 
 pub async fn init_db(pool: &SqlitePool) -> Result<()> {
     sqlx::query(
         r#"
-        CREATE TABLE IF NOT EXISTS config (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-
         CREATE TABLE IF NOT EXISTS episodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL UNIQUE,
@@ -44,88 +92,6 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
-
-    let defaults = [
-        ("story_count", "30"),
-        ("api_base_url", "https://api.openai.com/v1"),
-        ("model", "gpt-4o-mini"),
-        ("api_key", ""),
-    ];
-
-    for (key, value) in defaults {
-        sqlx::query(
-            r#"
-            INSERT OR IGNORE INTO config (key, value, updated_at)
-            VALUES (?1, ?2, datetime('now'))
-            "#,
-        )
-        .bind(key)
-        .bind(value)
-        .execute(pool)
-        .await?;
-    }
-
-    Ok(())
-}
-
-pub async fn get_config(pool: &SqlitePool) -> Result<Config> {
-    let rows: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM config")
-        .fetch_all(pool)
-        .await?;
-
-    let mut config = Config::default();
-    for (key, value) in rows {
-        match key.as_str() {
-            "story_count" => config.story_count = value.parse().unwrap_or(30),
-            "api_base_url" => config.api_base_url = value,
-            "model" => config.model = value,
-            "api_key" => config.api_key = value,
-            _ => {}
-        }
-    }
-    Ok(config)
-}
-
-/// Get configuration with environment variable overrides.
-/// Environment variables take precedence over database values for:
-/// - HACKER_NEWS_OPENAI_API_KEY (always from env if set, never stored in DB)
-/// - HACKER_NEWS_OPENAI_BASE_URL (overrides DB if set)
-/// - HACKER_NEWS_MODEL (overrides DB if set)
-/// - HACKER_NEWS_STORY_COUNT (overrides DB if set)
-pub async fn get_config_with_env_overrides(pool: &SqlitePool) -> Result<Config> {
-    let config = get_config(pool).await?;
-
-    let config = Config {
-        api_key: get_api_key_from_env().unwrap_or(config.api_key),
-        api_base_url: get_base_url_from_env().unwrap_or(config.api_base_url),
-        model: get_model_from_env().unwrap_or(config.model),
-        story_count: get_story_count_from_env().unwrap_or(config.story_count),
-    };
-
-    Ok(config)
-}
-
-pub async fn update_config(pool: &SqlitePool, config: &Config) -> Result<()> {
-    let updates = [
-        ("story_count", config.story_count.to_string()),
-        ("api_base_url", config.api_base_url.clone()),
-        ("model", config.model.clone()),
-        ("api_key", config.api_key.clone()),
-    ];
-
-    for (key, value) in updates {
-        sqlx::query(
-            r#"
-            INSERT INTO config (key, value, updated_at)
-            VALUES (?1, ?2, datetime('now'))
-            ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = datetime('now')
-            "#,
-        )
-        .bind(key)
-        .bind(&value)
-        .execute(pool)
-        .await?;
-    }
 
     Ok(())
 }
@@ -225,7 +191,6 @@ pub async fn get_all_stories(pool: &SqlitePool) -> Result<Vec<Story>> {
     Ok(stories)
 }
 
-/// Get existing hn_ids for a specific episode to avoid duplicates
 pub async fn get_existing_hn_ids(pool: &SqlitePool, episode_id: i64) -> Result<Vec<i64>> {
     let rows: Vec<(i64,)> = sqlx::query_as("SELECT hn_id FROM stories WHERE episode_id = ?1")
         .bind(episode_id)
@@ -235,7 +200,6 @@ pub async fn get_existing_hn_ids(pool: &SqlitePool, episode_id: i64) -> Result<V
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
-/// Get story by hn_id
 pub async fn get_story_by_hn_id(pool: &SqlitePool, hn_id: i64) -> Result<Option<Story>> {
     let story = sqlx::query_as::<_, Story>(
         "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag FROM stories WHERE hn_id = ?1",
@@ -247,7 +211,6 @@ pub async fn get_story_by_hn_id(pool: &SqlitePool, hn_id: i64) -> Result<Option<
     Ok(story)
 }
 
-/// Update summary for a specific language only, preserving the other language's summary
 pub async fn update_story_summary_by_lang(
     pool: &SqlitePool,
     story_id: i64,
@@ -281,7 +244,6 @@ pub async fn update_story_summary_by_lang(
     Ok(())
 }
 
-/// Update both summaries for a story
 pub async fn update_story_summary(
     pool: &SqlitePool,
     story_id: i64,
@@ -303,30 +265,23 @@ pub async fn update_story_summary(
     Ok(())
 }
 
-/// Delete all stories from database and return count of deleted rows
 pub async fn delete_all_stories(pool: &SqlitePool) -> Result<usize> {
     let result = sqlx::query("DELETE FROM stories").execute(pool).await?;
-
-    // Also delete all episodes
     sqlx::query("DELETE FROM episodes").execute(pool).await?;
 
     Ok(result.rows_affected() as usize)
 }
 
-/// Delete episode by date and all its stories, return count of deleted stories
 pub async fn delete_episode_by_date(pool: &SqlitePool, date: &str) -> Result<usize> {
-    // First get the episode id
     let episode = get_episode_by_date(pool, date).await?;
 
     match episode {
         Some(ep) => {
-            // Delete stories first
             let stories_result = sqlx::query("DELETE FROM stories WHERE episode_id = ?1")
                 .bind(ep.id)
                 .execute(pool)
                 .await?;
 
-            // Delete episode
             sqlx::query("DELETE FROM episodes WHERE id = ?1")
                 .bind(ep.id)
                 .execute(pool)
@@ -338,7 +293,6 @@ pub async fn delete_episode_by_date(pool: &SqlitePool, date: &str) -> Result<usi
     }
 }
 
-/// Delete all stories for a specific episode (keep the episode)
 pub async fn delete_stories_by_episode(pool: &SqlitePool, episode_id: i64) -> Result<usize> {
     let result = sqlx::query("DELETE FROM stories WHERE episode_id = ?1")
         .bind(episode_id)
@@ -348,20 +302,17 @@ pub async fn delete_stories_by_episode(pool: &SqlitePool, episode_id: i64) -> Re
     Ok(result.rows_affected() as usize)
 }
 
-/// Delete stories by hn_ids and return count of deleted rows
 pub async fn delete_stories_by_hn_ids(pool: &SqlitePool, hn_ids: &[i64]) -> Result<usize> {
     if hn_ids.is_empty() {
         return Ok(0);
     }
 
-    // Build the query with placeholders
     let placeholders: Vec<String> = hn_ids.iter().map(|_| "?".to_string()).collect();
     let query = format!(
         "DELETE FROM stories WHERE hn_id IN ({})",
         placeholders.join(",")
     );
 
-    // Build the query dynamically
     let mut query_builder = sqlx::query(&query);
     for hn_id in hn_ids {
         query_builder = query_builder.bind(hn_id);
@@ -371,4 +322,3 @@ pub async fn delete_stories_by_hn_ids(pool: &SqlitePool, hn_ids: &[i64]) -> Resu
 
     Ok(result.rows_affected() as usize)
 }
-

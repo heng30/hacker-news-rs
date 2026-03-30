@@ -425,7 +425,7 @@
             display: none;
         }
 
-        
+
         .calendar-day.empty {
             cursor: default;
         }
@@ -1201,15 +1201,6 @@
                 const data = await response.json();
                 if (data.success) {
                     const config = data.data;
-
-                    // Story Count (read-only)
-                    const storyCountContainer = document.getElementById('storyCountContainer');
-                    storyCountContainer.innerHTML = `
-                        <div class="env-badge">
-                            ${config.story_count_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
-                            <span>${config.story_count}</span>
-                        </div>
-                    `;
 
                     // Auto Update Interval (read-only, always from env)
                     const autoUpdateContainer = document.getElementById('autoUpdateContainer');

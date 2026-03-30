@@ -28,18 +28,17 @@ impl LlmClient {
         }
     }
 
-    /// Generate summary based on language preference
-    /// lang = "en" -> generates English summary only
-    /// lang = "zh" -> generates Chinese summary only
+    // Generate summary based on language preference
+    // lang = "en" -> generates English summary only
+    // lang = "zh" -> generates Chinese summary only
     pub async fn summarize(
         &self,
         title: &str,
         url: Option<&str>,
         lang: &str,
     ) -> Result<(Option<String>, Option<String>)> {
-        // 获取 URL 内容
         let content = match url {
-            Some(u) => crate::fetcher::content::fetch_url_content(u).await?,
+            Some(u) => crate::fetcher::fetch_url_content(u).await?,
             None => None,
         };
 
@@ -51,7 +50,6 @@ impl LlmClient {
         let context = format!("Title: {}\n\nContent:\n{}", title, content.unwrap());
 
         if lang == "en" {
-            // Generate English summary
             let prompt = "You are a helpful assistant that summarizes Hacker News stories in English. \
                           Requirements: \
                           1. MUST be between 200-300 words \
@@ -62,10 +60,9 @@ impl LlmClient {
             let response = self.call_llm(prompt, &context).await?;
             Ok((Some(response.trim().to_string()), None))
         } else {
-            // Generate Chinese summary
             let prompt = "You are a helpful assistant that summarizes Hacker News stories in Chinese. \
                           Requirements: \
-                          1. MUST be between 400-500 Chinese characters (字数必须在400-500字之间) \
+                          1. MUST be between 400-500 Chinese characters \
                           2. Provide comprehensive context, technical details, and implications \
                           3. Write in clear, professional Chinese suitable for technical readers \
                           Only output the Chinese summary, nothing else.";
@@ -89,11 +86,9 @@ impl LlmClient {
         let chat_config = ChatConfig { tx };
         let chat = Chat::new(prompt, context, chat_config, request_config, vec![]);
 
-        // Spawn the chat task
+        let mut full_response = String::new();
         let chat_handle = tokio::spawn(async move { chat.start().await });
 
-        // Collect the response
-        let mut full_response = String::new();
         while let Some(item) = rx.recv().await {
             if let Some(text) = item.text {
                 full_response.push_str(&text);
@@ -106,9 +101,7 @@ impl LlmClient {
             }
         }
 
-        // Wait for the chat task to complete
         chat_handle.await??;
-
         Ok(full_response)
     }
 }

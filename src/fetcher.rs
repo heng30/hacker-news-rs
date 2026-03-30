@@ -1,20 +1,18 @@
+use crate::config;
 use anyhow::Result;
 use htmd::HtmlToMarkdown;
+use std::time::Duration;
 
-use crate::config::get_socks5_proxy_from_env;
+pub const USER_AGENT: &str =
+    "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0";
 
-const MAX_CONTENT_LENGTH: usize = 32000;
-const TIMEOUT_SECS: u64 = 30;
-
-/// 从 URL 获取内容并转换为 Markdown
+// 从 URL 获取内容并转换为 Markdown
 pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
     let mut client_builder = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(TIMEOUT_SECS))
-        .user_agent("Mozilla/5.0 (compatible; HackerNewsRSS/1.0)");
+        .timeout(Duration::from_secs(config::get_fetch_html_timeout() as u64))
+        .user_agent(USER_AGENT);
 
-    // 配置 SOCKS5 代理（如果设置了环境变量）
-    if let Some(proxy) = get_socks5_proxy_from_env() {
-        // 支持 socks5://, socks5h:// 或 host:port 格式
+    if let Some(proxy) = config::get_socks5_proxy_from_env() {
         let proxy_url = if proxy.starts_with("socks5://") || proxy.starts_with("socks5h://") {
             proxy
         } else {
@@ -24,7 +22,6 @@ pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
     }
 
     let client = client_builder.build()?;
-
     let response = match client.get(url).send().await {
         Ok(r) => r,
         Err(e) => {
@@ -46,8 +43,7 @@ pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
         }
     };
 
-    let converter = HtmlToMarkdown::new();
-    let markdown = match converter.convert(&html) {
+    let markdown = match HtmlToMarkdown::new().convert(&html) {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!("Failed to convert HTML to Markdown for {}: {}", url, e);
@@ -55,10 +51,13 @@ pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
         }
     };
 
-    // 截断过长内容
-    let truncated = if markdown.len() > MAX_CONTENT_LENGTH {
-        tracing::debug!("Content truncated from {} to {} characters", markdown.len(), MAX_CONTENT_LENGTH);
-        &markdown[..MAX_CONTENT_LENGTH]
+    let truncated = if markdown.len() > config::get_max_markdown_content_length() as usize {
+        tracing::debug!(
+            "Content truncated from {} to {} characters",
+            markdown.len(),
+            config::get_max_markdown_content_length()
+        );
+        &markdown[..config::get_max_markdown_content_length() as usize]
     } else {
         &markdown
     };
