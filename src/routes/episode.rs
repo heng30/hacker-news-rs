@@ -23,6 +23,8 @@ use sqlx::SqlitePool;
 use std::{collections::HashSet, sync::Arc, sync::RwLock};
 use tokio_stream::StreamExt as _;
 
+const MAX_TOP_STORIES_PER_FETCH: usize = 20;
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: SqlitePool,
@@ -201,6 +203,7 @@ async fn fetch_stories(
     let ids: Vec<i64> = top_ids
         .into_iter()
         .filter(|id| !existing_ids_set.contains(id))
+        .take(MAX_TOP_STORIES_PER_FETCH)
         .collect();
 
     tracing::info!(
@@ -702,6 +705,7 @@ pub async fn fetch_stories_background(
     let ids: Vec<i64> = top_ids
         .into_iter()
         .filter(|id| !existing_ids_set.contains(id))
+        .take(MAX_TOP_STORIES_PER_FETCH)
         .collect();
 
     tracing::info!(
@@ -888,6 +892,7 @@ async fn fetch_stories_stream_task(
     let ids: Vec<i64> = top_ids
         .into_iter()
         .filter(|id| !existing_ids_set.contains(id))
+        .take(MAX_TOP_STORIES_PER_FETCH)
         .collect();
 
     tracing::info!(

@@ -77,6 +77,7 @@ fn background_update_thread(pool: SqlitePool, lang: Arc<RwLock<String>>) {
                 "Auto-update background task started, interval: {} minutes",
                 interval_minutes
             );
+
             loop {
                 interval.tick().await;
                 tracing::info!("Auto-update triggered");

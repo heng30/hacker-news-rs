@@ -374,6 +374,8 @@
         }
 
         .calendar-day {
+            width: 66%;
+            margin: auto;
             aspect-ratio: 1;
             display: flex;
             align-items: center;
@@ -382,6 +384,7 @@
             border-radius: 50%;
             cursor: pointer;
             transition: background 0.2s;
+            position: relative;
         }
 
         .calendar-day:hover {
@@ -410,9 +413,16 @@
             border-radius: 50%;
         }
 
-        .calendar-day.has-data:not(.today) {
+        .calendar-day.has-data:not(.today)::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
             background: var(--calendar-has-data);
-            color: white;
+            border-radius: 50%;
         }
 
         .calendar-day.selected {
