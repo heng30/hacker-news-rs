@@ -124,16 +124,17 @@
         .icon-btn:disabled {
             background: rgba(255,255,255,0.1);
             cursor: not-allowed;
+            opacity: 0.5;
         }
 
-        /* Refresh button animation */
+        /* Refresh button animation - only spin when loading */
         .icon-btn svg {
             width: 14px;
             height: 14px;
             transition: transform 0.3s ease;
         }
 
-        .icon-btn:disabled svg {
+        .icon-btn.loading svg {
             animation: spin 1s linear infinite;
         }
 
@@ -1257,7 +1258,7 @@
 
         async function fetchStories() {
             const btn = document.getElementById('refreshBtn');
-            btn.disabled = true;
+            btn.classList.add('loading');
 
             // Use SSE for streaming updates
             const eventSource = new EventSource('/api/fetch/stream?lang=' + currentLang);
@@ -1295,7 +1296,8 @@
                                 showToast(t('fetchError'), 'error');
                             }
                             eventSource.close();
-                            btn.disabled = false;
+                            btn.classList.remove('loading');
+                            updateRefreshButtonState();
                             // Refresh episodes list
                             loadEpisodes();
                             break;
@@ -1310,7 +1312,8 @@
                 hideToast();
                 showToast('Connection error', 'error');
                 eventSource.close();
-                btn.disabled = false;
+                btn.classList.remove('loading');
+                updateRefreshButtonState();
                 hasError = true;
             };
         }
@@ -1504,6 +1507,7 @@
             let stories = episodeData.stories;
 
             selectedDate = episode.date;
+            updateRefreshButtonState();
 
             // Deduplicate stories by hn_id (keep first occurrence, highest score)
             const seenHnIds = new Set();
@@ -1813,9 +1817,21 @@
             renderCalendar();
             loadEpisode(dateStr);
             closeCalendarModal();
+            updateRefreshButtonState();
         }
 
         // Utility
+        function getTodayDateString() {
+            const today = new Date();
+            return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        }
+
+        function updateRefreshButtonState() {
+            const btn = document.getElementById('refreshBtn');
+            const today = getTodayDateString();
+            btn.disabled = (selectedDate && selectedDate !== today);
+        }
+
         function escapeHtml(text) {
             if (!text) return '';
             const div = document.createElement('div');
