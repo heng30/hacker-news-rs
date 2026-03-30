@@ -9,12 +9,16 @@ use anyhow::Result;
 use axum::Router;
 use config::AppConfig;
 use db::init_db;
-use routes::AppState;
-use routes::config::config_routes;
-use routes::episode::episode_routes;
-use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
+use routes::{AppState, config::config_routes, episode::episode_routes};
+use sqlx::SqlitePool;
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::ServeDir,
+};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -37,7 +41,10 @@ async fn main() -> Result<()> {
     init_db(&pool).await?;
     tracing::info!("Database initialized");
 
-    let state = Arc::new(AppState { pool });
+    let lang = Arc::new(RwLock::new("zh".to_string()));
+    background_update_thread(pool.clone(), lang.clone());
+
+    let state = Arc::new(AppState { pool, lang });
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -58,4 +65,28 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+fn background_update_thread(pool: SqlitePool, lang: Arc<RwLock<String>>) {
+    let interval_minutes = config::get_auto_update_interval_from_env();
+    if interval_minutes > 0 {
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(interval_minutes as u64 * 60));
+            tracing::info!(
+                "Auto-update background task started, interval: {} minutes",
+                interval_minutes
+            );
+            loop {
+                interval.tick().await;
+                tracing::info!("Auto-update triggered");
+                match routes::episode::fetch_stories_background(pool.clone(), lang.clone()).await {
+                    Ok(count) => {
+                        tracing::info!("Auto-update completed: {} stories processed", count)
+                    }
+                    Err(e) => tracing::error!("Auto-update failed: {}", e),
+                }
+            }
+        });
+    }
 }

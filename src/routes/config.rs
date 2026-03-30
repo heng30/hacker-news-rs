@@ -5,8 +5,8 @@ use crate::{
     },
     routes::AppState,
 };
-use axum::{Router, extract::State, http::StatusCode, response::Json, routing::get};
-use serde::Serialize;
+use axum::{Router, extract::State, http::StatusCode, response::Json, routing::{get, put}};
+use serde::{Serialize, Deserialize};
 use std::sync::Arc;
 
 #[derive(Serialize)]
@@ -36,8 +36,21 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
+#[derive(Deserialize)]
+struct SetLangRequest {
+    lang: String,
+}
+
+#[derive(Serialize)]
+struct LangResponse {
+    lang: String,
+}
+
 pub fn config_routes() -> Router<Arc<AppState>> {
-    Router::new().route("/api/config", get(get_config))
+    Router::new()
+        .route("/api/config", get(get_config))
+        .route("/api/lang", get(get_lang))
+        .route("/api/lang", put(set_lang))
 }
 
 async fn get_config(
@@ -56,6 +69,23 @@ async fn get_config(
     };
 
     Ok(Json(ApiResponse::success(response)))
+}
+
+async fn get_lang(
+    state: State<Arc<AppState>>,
+) -> Json<ApiResponse<LangResponse>> {
+    let lang = state.lang.read().unwrap().clone();
+    Json(ApiResponse::success(LangResponse { lang }))
+}
+
+async fn set_lang(
+    state: State<Arc<AppState>>,
+    Json(payload): Json<SetLangRequest>,
+) -> Json<ApiResponse<LangResponse>> {
+    let mut lang = state.lang.write().unwrap();
+    *lang = payload.lang.clone();
+    tracing::info!("Language setting updated to: {}", payload.lang);
+    Json(ApiResponse::success(LangResponse { lang: payload.lang }))
 }
 
 // Mask a sensitive string for display.

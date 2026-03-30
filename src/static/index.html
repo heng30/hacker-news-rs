@@ -839,24 +839,6 @@
             </div>
 
             <div class="form-group">
-                <label id="configLabelStoryCount">Number of Stories</label>
-                <div id="storyCountContainer">
-                    <div class="env-badge">
-                        <span>-</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label id="configLabelAutoUpdate">Auto Update</label>
-                <div id="autoUpdateContainer">
-                    <div class="env-badge">
-                        <span>-</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
                 <label id="configLabelApiBaseUrl">API Base URL</label>
                 <div id="apiBaseUrlContainer">
                     <div class="env-badge">
@@ -895,6 +877,15 @@
             <div class="form-group">
                 <label id="configLabelSearchKeywords">Search Keywords</label>
                 <div id="searchKeywordsContainer">
+                    <div class="env-badge">
+                        <span>-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label id="configLabelAutoUpdate">Auto Update</label>
+                <div id="autoUpdateContainer">
                     <div class="env-badge">
                         <span>-</span>
                     </div>
@@ -943,7 +934,6 @@
                 fetching: 'Fetching stories from Hacker News and generating summaries...',
                 fetchedSuccess: 'Fetched {count} stories for {date}',
                 configTitle: 'Configuration',
-                configStoryCount: 'Number of Stories',
                 configAutoUpdateInterval: 'Auto Update Interval',
                 configApiBaseUrl: 'API Base URL',
                 configModel: 'Model',
@@ -982,7 +972,6 @@
                 fetching: '正在获取 Hacker News 故事并生成摘要...',
                 fetchedSuccess: '已获取 {count} 条故事，日期：{date}',
                 configTitle: '配置',
-                configStoryCount: '故事数量',
                 configAutoUpdateInterval: '自动更新间隔',
                 configApiBaseUrl: 'API 地址',
                 configModel: '模型',
@@ -1050,17 +1039,31 @@
             const savedLang = localStorage.getItem('lang') || 'en';
             currentLang = savedLang;
             updateLanguageIcon();
+            syncLangToBackend();
         }
 
         function toggleLanguage() {
             currentLang = currentLang === 'en' ? 'zh' : 'en';
             localStorage.setItem('lang', currentLang);
             updateLanguageIcon();
+            syncLangToBackend();
             // Refresh current view if there's content
             if (selectedDate) {
                 loadEpisode(selectedDate);
             } else {
                 loadLatestEpisode();
+            }
+        }
+
+        async function syncLangToBackend() {
+            try {
+                await fetch('/api/lang', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lang: currentLang })
+                });
+            } catch (e) {
+                console.warn('Failed to sync language to backend:', e);
             }
         }
 
@@ -1130,7 +1133,6 @@
             document.getElementById('configModal').classList.add('active');
             // Update modal labels with current language
             document.getElementById('configModalTitleText').textContent = t('configTitle');
-            document.getElementById('configLabelStoryCount').textContent = t('configStoryCount');
             document.getElementById('configLabelAutoUpdate').textContent = t('configAutoUpdateInterval');
             document.getElementById('configLabelApiBaseUrl').textContent = t('configApiBaseUrl');
             document.getElementById('configLabelModel').textContent = t('configModel');
@@ -1209,7 +1211,6 @@
                         : t('configDisabled');
                     autoUpdateContainer.innerHTML = `
                         <div class="env-badge">
-                            <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                             <span>${intervalText}</span>
                         </div>
                     `;
@@ -1245,7 +1246,6 @@
                     const socks5Container = document.getElementById('socks5Container');
                     socks5Container.innerHTML = `
                         <div class="env-badge">
-                            <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                             <span>${config.socks5_proxy || t('configDisabled')}</span>
                         </div>
                     `;
@@ -1254,7 +1254,6 @@
                     const searchKeywordsContainer = document.getElementById('searchKeywordsContainer');
                     searchKeywordsContainer.innerHTML = `
                         <div class="env-badge">
-                            <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                             <span>${config.search_keywords || t('configDisabled')}</span>
                         </div>
                     `;

@@ -20,12 +20,13 @@ use axum::{
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, sync::RwLock};
 use tokio_stream::StreamExt as _;
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: SqlitePool,
+    pub lang: Arc<RwLock<String>>,
 }
 
 #[derive(Serialize)]
@@ -672,6 +673,193 @@ async fn fetch_stories_stream(
     });
 
     Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+pub async fn fetch_stories_background(
+    pool: SqlitePool,
+    lang: Arc<RwLock<String>>,
+) -> anyhow::Result<usize> {
+    let lang_value = lang.read().unwrap().clone();
+    let config = get_llm_config_from_env();
+    if config.api_key.is_empty() {
+        tracing::warn!("Auto-update skipped: API key not configured");
+        return Ok(0);
+    }
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let episode_id = db::create_episode(&pool, &today).await?;
+
+    let existing_hn_ids = db::get_existing_hn_ids(&pool, episode_id).await?;
+    let existing_ids_set: HashSet<i64> = existing_hn_ids.into_iter().collect();
+    tracing::info!(
+        "Auto-update: Found {} existing stories for episode {}",
+        existing_ids_set.len(),
+        episode_id
+    );
+
+    let hn_client = HnClient::new();
+    let top_ids = hn_client.fetch_top_stories().await?;
+    let ids: Vec<i64> = top_ids
+        .into_iter()
+        .filter(|id| !existing_ids_set.contains(id))
+        .collect();
+
+    tracing::info!(
+        "Auto-update: Fetching {} new top stories (filtered out {} duplicates)",
+        ids.len(),
+        existing_ids_set.len()
+    );
+
+    let top_stories = if !ids.is_empty() {
+        hn_client.fetch_stories(&ids).await?
+    } else {
+        Vec::new()
+    };
+
+    let keywords = crate::config::get_search_keywords_from_env();
+    let search_stories = if let Some(kws) = keywords {
+        tracing::info!("Auto-update: Searching for keywords: {:?}", kws);
+        let mut stories = Vec::new();
+        for kw in kws {
+            match hn_client.search_newest(&kw, 10).await {
+                Ok(s) => {
+                    let filtered: Vec<_> = s
+                        .into_iter()
+                        .filter(|s| !existing_ids_set.contains(&s.id))
+                        .collect();
+                    tracing::info!(
+                        "Auto-update: Found {} stories for keyword '{}'",
+                        filtered.len(),
+                        kw
+                    );
+                    stories.extend(filtered);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Auto-update: Failed to search Algolia for '{}': {}. Skipping.",
+                        kw,
+                        e
+                    );
+                    continue;
+                }
+            }
+        }
+        stories
+    } else {
+        Vec::new()
+    };
+
+    let mut all_hn_stories: Vec<crate::db::HnStory> = top_stories;
+    let top_ids_set: HashSet<i64> = all_hn_stories.iter().map(|s| s.id).collect();
+    for story in search_stories {
+        if !top_ids_set.contains(&story.id) {
+            all_hn_stories.push(story);
+        }
+    }
+
+    tracing::info!(
+        "Auto-update: Total {} unique stories to process",
+        all_hn_stories.len()
+    );
+
+    if all_hn_stories.is_empty() {
+        tracing::info!("Auto-update: No new stories to fetch");
+        return Ok(0);
+    }
+
+    tracing::info!(
+        "Auto-update: Initializing LLM client with base_url: {}, model: {}",
+        config.api_base_url,
+        config.model
+    );
+    let llm_client = LlmClient::new(
+        config.api_key.clone(),
+        config.api_base_url.clone(),
+        config.model.clone(),
+        get_llm_no_stream_from_env(),
+        get_llm_user_agent_from_env(),
+        get_llm_timeout(),
+    );
+
+    // Save stories without summaries first
+    let mut saved_stories: Vec<(crate::db::Story, i64)> = Vec::new();
+    for hn_story in all_hn_stories {
+        let mut story: crate::db::Story = hn_story.into();
+        story.episode_id = episode_id;
+        db::save_story(&pool, &story).await?;
+
+        let saved = db::get_story_by_hn_id(&pool, story.hn_id).await?;
+        if let Some(saved_story) = saved {
+            saved_stories.push((saved_story.clone(), saved_story.id));
+        }
+    }
+
+    // Generate summaries in parallel with concurrency control
+    let mut stories_count = 0;
+    for chunk in saved_stories.chunks(3) {
+        let futures: Vec<_> = chunk
+            .iter()
+            .map(|(story, story_id)| {
+                let pool = pool.clone();
+                let llm_client = llm_client.clone();
+                let lang = lang_value.clone();
+                let story_clone = story.clone();
+                let story_id_clone = *story_id;
+
+                async move {
+                    tracing::info!(
+                        "Auto-update: Generating {} summary for story {}: {}",
+                        lang,
+                        story_clone.hn_id,
+                        story_clone.title
+                    );
+                    match llm_client
+                        .summarize(&story_clone.title, story_clone.url.as_deref(), &lang)
+                        .await
+                    {
+                        Ok((summary, summary_zh)) => {
+                            tracing::info!(
+                                "Auto-update: Successfully generated summary for story {}",
+                                story_clone.hn_id
+                            );
+                            if let Err(e) = db::update_story_summary(
+                                &pool,
+                                story_id_clone,
+                                summary.as_deref(),
+                                summary_zh.as_deref(),
+                            )
+                            .await
+                            {
+                                tracing::error!(
+                                    "Auto-update: Failed to update summary for story {}: {}",
+                                    story_clone.hn_id,
+                                    e
+                                );
+                            }
+                            true
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "Auto-update: Failed to summarize story {}: {}",
+                                story_clone.hn_id,
+                                e
+                            );
+                            false
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        let results = futures::future::join_all(futures).await;
+        stories_count += results.iter().filter(|&r| *r).count();
+    }
+
+    tracing::info!(
+        "Auto-update: Completed, {} stories processed",
+        stories_count
+    );
+    Ok(stories_count)
 }
 
 async fn fetch_stories_stream_task(

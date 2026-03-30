@@ -6,7 +6,6 @@ use std::time::Duration;
 pub const USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0";
 
-// 从 URL 获取内容并转换为 Markdown
 pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
     let mut client_builder = reqwest::Client::builder()
         .timeout(Duration::from_secs(config::get_fetch_html_timeout() as u64))
