@@ -1,8 +1,8 @@
 use crate::{
     api::HnClient,
     config::{
-        get_llm_config_from_env, get_llm_no_stream_from_env, get_llm_user_agent_from_env,
-        get_search_keywords_from_env,
+        get_llm_config_from_env, get_llm_no_stream_from_env, get_llm_timeout,
+        get_llm_user_agent_from_env, get_search_keywords_from_env,
     },
     db::{self, EpisodeWithStories},
     llm::LlmClient,
@@ -306,6 +306,7 @@ async fn fetch_stories(
         config.model.clone(),
         get_llm_no_stream_from_env(),
         get_llm_user_agent_from_env(),
+        get_llm_timeout(),
     );
 
     let lang = payload.lang.as_deref().unwrap_or("zh");
@@ -529,6 +530,7 @@ async fn regenerate_story_summary(
                 config.model.clone(),
                 get_llm_no_stream_from_env(),
                 get_llm_user_agent_from_env(),
+                get_llm_timeout(),
             );
 
             tracing::info!(
@@ -775,6 +777,7 @@ async fn fetch_stories_stream_task(
         config.model.clone(),
         get_llm_no_stream_from_env(),
         get_llm_user_agent_from_env(),
+        get_llm_timeout(),
     );
 
     // Save stories without summaries first and send story_added events

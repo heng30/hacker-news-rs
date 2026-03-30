@@ -9,6 +9,7 @@ pub struct LlmClient {
     model: String,
     no_stream: Option<bool>,
     user_agent: Option<String>,
+    request_timeout: u32,
 }
 
 impl LlmClient {
@@ -18,6 +19,7 @@ impl LlmClient {
         model: String,
         no_stream: Option<bool>,
         user_agent: Option<String>,
+        request_timeout: u32,
     ) -> Self {
         Self {
             api_key,
@@ -25,6 +27,7 @@ impl LlmClient {
             model,
             no_stream,
             user_agent,
+            request_timeout,
         }
     }
 
@@ -80,6 +83,7 @@ impl LlmClient {
             temperature: Some(0.7),
             no_stream: self.no_stream,
             user_agent: self.user_agent.clone(),
+            request_timeout: self.request_timeout,
         };
 
         let (tx, mut rx) = mpsc::channel::<StreamTextItem>(100);

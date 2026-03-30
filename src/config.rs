@@ -10,6 +10,7 @@ pub const ENV_SOCKS5_PROXY: &str = "HACKER_NEWS_SOCKS5";
 pub const ENV_SEARCH_KEYWORDS: &str = "HACKER_NEWS_SEARCH_KEYWORDS";
 pub const ENV_LLM_NO_STREAM: &str = "HACKER_NEWS_LLM_NO_STREAM";
 pub const ENV_LLM_USER_AGENT: &str = "HACKER_NEWS_LLM_USER_AGENT";
+pub const ENV_LLM_TIMEOUT: &str = "HACKER_NEWS_LLM_TIMEOUT";
 pub const ENV_FETCH_HTML_TIMEOUT: &str = "HACKER_NEWS_FETCH_HTML_TIMEOUT";
 pub const ENV_MAX_MARKDOWN_CONTENT_LENGTH: &str = "HACKER_NEWS_MARKDOWN_MAX_CONTENT_LENGTH";
 
@@ -91,6 +92,13 @@ pub fn get_llm_no_stream_from_env() -> Option<bool> {
 
 pub fn get_llm_user_agent_from_env() -> Option<String> {
     env::var(ENV_LLM_USER_AGENT).ok().filter(|s| !s.is_empty())
+}
+
+pub fn get_llm_timeout() -> u32 {
+    env::var(ENV_LLM_TIMEOUT)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(180)
 }
 
 pub fn get_fetch_html_timeout() -> u32 {

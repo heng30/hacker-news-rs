@@ -14,6 +14,7 @@ pub struct APIConfig {
     pub temperature: Option<f32>,
     pub no_stream: Option<bool>,
     pub user_agent: Option<String>,
+    pub request_timeout: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

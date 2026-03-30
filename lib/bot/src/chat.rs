@@ -106,7 +106,7 @@ impl Chat {
             .post(&url)
             .headers(headers)
             .json(&request_body)
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(self.config.request_timeout as u64))
             .send()
             .await?;
 
