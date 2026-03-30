@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+pkill hacker-news-rs
+source $HOME/init/shell-init.sh
+cd $HOME/.local/bin/hacker-news-dist && ./hacker-news-rs
+
