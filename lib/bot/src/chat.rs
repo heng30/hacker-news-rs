@@ -71,7 +71,14 @@ impl Chat {
         let headers = self.headers();
         let client = reqwest::Client::new();
 
-        let url = format!("{}{}", self.config.api_base_url, "/chat/completions");
+        // Handle base_url that may or may not already include /chat/completions
+        let url = if self.config.api_base_url.ends_with("/chat/completions") {
+            self.config.api_base_url.clone()
+        } else {
+            // Remove trailing slash if present, then append endpoint
+            let base = self.config.api_base_url.trim_end_matches('/');
+            format!("{}{}", base, "/chat/completions")
+        };
 
         let request_body = request::ChatCompletion {
             messages: self.messages,
