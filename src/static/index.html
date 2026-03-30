@@ -1176,6 +1176,20 @@
                 if (e.target.id === 'calendarModal') closeCalendarModal();
             });
 
+            // ESC key to close modals
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const configModal = document.getElementById('configModal');
+                    const calendarModal = document.getElementById('calendarModal');
+
+                    if (configModal.classList.contains('active')) {
+                        closeModal();
+                    } else if (calendarModal.classList.contains('active')) {
+                        closeCalendarModal();
+                    }
+                }
+            });
+
             await loadEpisodes();
             await loadLatestEpisode();
         });
