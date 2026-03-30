@@ -7,14 +7,27 @@ pub struct LlmClient {
     api_key: String,
     base_url: String,
     model: String,
+    no_stream: Option<bool>,
+    no_llm_proxy: Option<bool>,
+    user_agent: Option<String>,
 }
 
 impl LlmClient {
-    pub fn new(api_key: String, base_url: String, model: String) -> Self {
+    pub fn new(
+        api_key: String,
+        base_url: String,
+        model: String,
+        no_stream: Option<bool>,
+        no_llm_proxy: Option<bool>,
+        user_agent: Option<String>,
+    ) -> Self {
         Self {
             api_key,
             base_url,
             model,
+            no_stream,
+            no_llm_proxy,
+            user_agent,
         }
     }
 
@@ -65,13 +78,15 @@ impl LlmClient {
         }
     }
 
-    /// Internal helper to call the LLM API using the bot library
     async fn call_llm(&self, prompt: &str, context: &str) -> Result<String> {
         let request_config = APIConfig {
             api_base_url: self.base_url.clone(),
             api_model: self.model.clone(),
             api_key: self.api_key.clone(),
             temperature: Some(0.7),
+            no_stream: self.no_stream,
+            no_llm_proxy: self.no_llm_proxy,
+            user_agent: self.user_agent.clone(),
         };
 
         let (tx, mut rx) = mpsc::channel::<StreamTextItem>(100);

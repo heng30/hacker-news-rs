@@ -11,6 +11,9 @@ pub const ENV_PORT: &str = "HACKER_NEWS_PORT";
 pub const ENV_AUTO_UPDATE_INTERVAL: &str = "HACKER_NEWS_AUTO_UPDATE_INTERVAL";
 pub const ENV_SOCKS5_PROXY: &str = "HACKER_NEWS_SOCKS5";
 pub const ENV_SEARCH_KEYWORDS: &str = "HACKER_NEWS_SEARCH_KEYWORDS";
+pub const ENV_LLM_NO_STREAM: &str = "HACKER_NEWS_LLM_NO_STREAM";
+pub const ENV_LLM_NO_LLM_PROXY: &str = "HACKER_NEWS_LLM_NO_LLM_PROXY";
+pub const ENV_LLM_USER_AGENT: &str = "HACKER_NEWS_LLM_USER_AGENT";
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -84,4 +87,26 @@ pub fn get_search_keywords_from_env() -> Option<Vec<String>> {
                 .filter(|k| !k.is_empty())
                 .collect()
         })
+}
+
+/// Get LLM no_stream setting from environment variable
+/// When true, disables streaming mode (useful for APIs that don't support it)
+pub fn get_llm_no_stream_from_env() -> Option<bool> {
+    env::var(ENV_LLM_NO_STREAM)
+        .ok()
+        .and_then(|s| s.parse().ok())
+}
+
+/// Get LLM no_llm_proxy setting from environment variable
+/// When true, disables system proxy for LLM requests
+pub fn get_llm_no_llm_proxy_from_env() -> Option<bool> {
+    env::var(ENV_LLM_NO_LLM_PROXY)
+        .ok()
+        .and_then(|s| s.parse().ok())
+}
+
+/// Get LLM User-Agent from environment variable
+/// Some APIs reject the default reqwest User-Agent
+pub fn get_llm_user_agent_from_env() -> Option<String> {
+    env::var(ENV_LLM_USER_AGENT).ok().filter(|s| !s.is_empty())
 }

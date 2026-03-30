@@ -17,7 +17,10 @@ use tokio_stream::StreamExt as _;
 use crate::db::{self, models::EpisodeWithStories};
 use crate::hn::api::HnClient;
 use crate::llm::client::LlmClient;
-use crate::config::get_search_keywords_from_env;
+use crate::config::{
+    get_search_keywords_from_env, get_llm_no_stream_from_env, get_llm_no_llm_proxy_from_env,
+    get_llm_user_agent_from_env,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -254,7 +257,14 @@ async fn fetch_stories(
 
     // Initialize LLM client
     tracing::info!("Initializing LLM client with base_url: {}, model: {}", config.api_base_url, config.model);
-    let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
+    let llm_client = LlmClient::new(
+        config.api_key.clone(),
+        config.api_base_url.clone(),
+        config.model.clone(),
+        get_llm_no_stream_from_env(),
+        get_llm_no_llm_proxy_from_env(),
+        get_llm_user_agent_from_env(),
+    );
 
     // Determine language for summary generation
     let lang = payload.lang.as_deref().unwrap_or("zh");
@@ -458,7 +468,14 @@ async fn regenerate_story_summary(
     match story {
         Some(s) => {
             // Initialize LLM client
-            let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
+            let llm_client = LlmClient::new(
+                config.api_key.clone(),
+                config.api_base_url.clone(),
+                config.model.clone(),
+                get_llm_no_stream_from_env(),
+                get_llm_no_llm_proxy_from_env(),
+                get_llm_user_agent_from_env(),
+            );
 
             // Regenerate summary based on language preference
             tracing::info!("Regenerating {} summary for story {}: {}", lang, s.hn_id, s.title);
@@ -659,7 +676,14 @@ async fn fetch_stories_stream_task(
 
     // Initialize LLM client
     tracing::info!("Initializing LLM client with base_url: {}, model: {}", config.api_base_url, config.model);
-    let llm_client = LlmClient::new(config.api_key.clone(), config.api_base_url.clone(), config.model.clone());
+    let llm_client = LlmClient::new(
+        config.api_key.clone(),
+        config.api_base_url.clone(),
+        config.model.clone(),
+        get_llm_no_stream_from_env(),
+        get_llm_no_llm_proxy_from_env(),
+        get_llm_user_agent_from_env(),
+    );
 
     // Save stories without summaries first and send story_added events
     let mut saved_stories: Vec<(crate::db::models::Story, i64)> = Vec::new();

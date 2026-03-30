@@ -12,6 +12,9 @@ pub struct APIConfig {
     pub api_model: String,
     pub api_key: String,
     pub temperature: Option<f32>,
+    pub no_stream: Option<bool>,
+    pub no_llm_proxy: Option<bool>,
+    pub user_agent: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
