@@ -1204,6 +1204,7 @@
 
             await loadEpisodes();
             await loadLatestEpisode();
+            await checkAndRegenerateMissingSummaries();
         });
 
         // API Functions
@@ -1768,6 +1769,66 @@
                 showToast('Error: ' + error.message, 'error');
             } finally {
                 if (btn) btn.disabled = false;
+            }
+        }
+
+        // Internal regenerate function without toast notifications (used for auto-regeneration)
+        async function regenerateSummaryInternal(hnId) {
+            const btn = document.getElementById(`regenerate-${hnId}`);
+            if (btn) btn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/story/${hnId}/regenerate`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lang: currentLang })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    // Update the story in currentStories
+                    const stories = window.currentStories || [];
+                    const updatedStory = data.data.story;
+                    for (let i = 0; i < stories.length; i++) {
+                        if (stories[i].hn_id === updatedStory.hn_id) {
+                            stories[i] = updatedStory;
+                            break;
+                        }
+                    }
+                    window.currentStories = stories;
+                    refreshStoriesListWithPlaceholders();
+                    return { success: true };
+                } else {
+                    updateStorySummary(hnId, null, null, data.error || 'Failed to regenerate');
+                    return { success: false, error: data.error };
+                }
+            } catch (error) {
+                updateStorySummary(hnId, null, null, error.message);
+                return { success: false, error: error.message };
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // Check for missing summaries and regenerate them automatically
+        async function checkAndRegenerateMissingSummaries() {
+            const stories = window.currentStories || [];
+            if (stories.length === 0) return;
+
+            // Filter stories missing summary based on current language
+            const missingStories = stories.filter(s => {
+                if (currentLang === 'zh') {
+                    return !s.summary_zh || s.summary_zh === '';
+                }
+                return !s.summary || s.summary === '';
+            });
+
+            if (missingStories.length === 0) return;
+
+            // Regenerate in batches of 3 (matching existing concurrency pattern)
+            const batchSize = 3;
+            for (let i = 0; i < missingStories.length; i += batchSize) {
+                const batch = missingStories.slice(i, i + batchSize);
+                await Promise.all(batch.map(s => regenerateSummaryInternal(s.hn_id)));
             }
         }
 
