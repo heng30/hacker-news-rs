@@ -13,6 +13,7 @@ pub const ENV_LLM_USER_AGENT: &str = "HACKER_NEWS_LLM_USER_AGENT";
 pub const ENV_LLM_TIMEOUT: &str = "HACKER_NEWS_LLM_TIMEOUT";
 pub const ENV_FETCH_HTML_TIMEOUT: &str = "HACKER_NEWS_FETCH_HTML_TIMEOUT";
 pub const ENV_MAX_MARKDOWN_CONTENT_LENGTH: &str = "HACKER_NEWS_MARKDOWN_MAX_CONTENT_LENGTH";
+pub const ENV_TOP_STORY_MIN_SCORE: &str = "HACKER_NEWS_TOP_STORY_MIN_SCORE";
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -113,4 +114,11 @@ pub fn get_max_markdown_content_length() -> u32 {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(16000)
+}
+
+pub fn get_top_story_min_score_from_env() -> i64 {
+    env::var(ENV_TOP_STORY_MIN_SCORE)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(500)
 }

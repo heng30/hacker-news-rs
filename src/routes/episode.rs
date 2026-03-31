@@ -2,7 +2,7 @@ use crate::{
     api::HnClient,
     config::{
         get_llm_config_from_env, get_llm_no_stream_from_env, get_llm_timeout,
-        get_llm_user_agent_from_env, get_search_keywords_from_env,
+        get_llm_user_agent_from_env, get_search_keywords_from_env, get_top_story_min_score_from_env,
     },
     db::{self, EpisodeWithStories},
     llm::LlmClient,
@@ -22,8 +22,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::{collections::HashSet, sync::Arc, sync::RwLock};
 use tokio_stream::StreamExt as _;
-
-const MAX_TOP_STORIES_PER_FETCH: usize = 20;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -208,18 +206,20 @@ async fn fetch_stories(
         )
     })?;
 
+    let min_score = get_top_story_min_score_from_env();
     let top_stories: Vec<crate::db::HnStory> = all_top_stories
         .into_iter()
         .filter(|s| {
             let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
             !existing_url_hashes.contains(&hash)
         })
-        .take(MAX_TOP_STORIES_PER_FETCH)
+        .filter(|s| s.score >= min_score)
         .collect();
 
     tracing::info!(
-        "Fetching {} new top stories (filtered out {} duplicates by URL hash)",
+        "Fetching {} top stories with score >= {} (filtered out {} duplicates by URL hash)",
         top_stories.len(),
+        min_score,
         top_ids.len() - top_stories.len()
     );
 
@@ -707,18 +707,20 @@ pub async fn fetch_stories_background(
     let top_ids = hn_client.fetch_top_stories().await?;
     let all_top_stories = hn_client.fetch_stories(&top_ids).await?;
 
+    let min_score = get_top_story_min_score_from_env();
     let top_stories: Vec<crate::db::HnStory> = all_top_stories
         .into_iter()
         .filter(|s| {
             let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
             !existing_url_hashes.contains(&hash)
         })
-        .take(MAX_TOP_STORIES_PER_FETCH)
+        .filter(|s| s.score >= min_score)
         .collect();
 
     tracing::info!(
-        "Auto-update: Fetching {} new top stories (filtered out {} duplicates by URL hash)",
+        "Auto-update: Fetching {} top stories with score >= {} (filtered out {} duplicates by URL hash)",
         top_stories.len(),
+        min_score,
         top_ids.len() - top_stories.len()
     );
 
@@ -908,18 +910,20 @@ async fn fetch_stories_stream_task(
     let top_ids = hn_client.fetch_top_stories().await?;
     let all_top_stories = hn_client.fetch_stories(&top_ids).await?;
 
+    let min_score = get_top_story_min_score_from_env();
     let top_stories: Vec<crate::db::HnStory> = all_top_stories
         .into_iter()
         .filter(|s| {
             let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
             !existing_url_hashes.contains(&hash)
         })
-        .take(MAX_TOP_STORIES_PER_FETCH)
+        .filter(|s| s.score >= min_score)
         .collect();
 
     tracing::info!(
-        "Fetching {} new top stories (filtered out {} duplicates by URL hash)",
+        "Fetching {} top stories with score >= {} (filtered out {} duplicates by URL hash)",
         top_stories.len(),
+        min_score,
         top_ids.len() - top_stories.len()
     );
 
