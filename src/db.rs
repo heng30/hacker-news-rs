@@ -1,6 +1,8 @@
 use anyhow::Result;
+use blake3::Hash;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Row, SqlitePool};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Episode {
@@ -87,6 +89,12 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             fetched_at TEXT NOT NULL,
             tag TEXT NOT NULL DEFAULT 'top',
             FOREIGN KEY (episode_id) REFERENCES episodes(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS url_hashes (
+            url_hash TEXT PRIMARY KEY,
+            hn_id INTEGER NOT NULL,
+            first_seen_at TEXT NOT NULL
         );
         "#,
     )
@@ -189,15 +197,6 @@ pub async fn get_all_stories(pool: &SqlitePool) -> Result<Vec<Story>> {
     .await?;
 
     Ok(stories)
-}
-
-pub async fn get_existing_hn_ids(pool: &SqlitePool, episode_id: i64) -> Result<Vec<i64>> {
-    let rows: Vec<(i64,)> = sqlx::query_as("SELECT hn_id FROM stories WHERE episode_id = ?1")
-        .bind(episode_id)
-        .fetch_all(pool)
-        .await?;
-
-    Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
 pub async fn get_story_by_hn_id(pool: &SqlitePool, hn_id: i64) -> Result<Option<Story>> {
@@ -321,4 +320,36 @@ pub async fn delete_stories_by_hn_ids(pool: &SqlitePool, hn_ids: &[i64]) -> Resu
     let result = query_builder.execute(pool).await?;
 
     Ok(result.rows_affected() as usize)
+}
+
+pub fn compute_dedup_hash(url: Option<&str>, title: &str) -> String {
+    let content = url.unwrap_or(title);
+    Hash::from(blake3::hash(content.as_bytes()))
+        .to_hex()
+        .to_string()
+}
+
+pub async fn get_existing_url_hashes(pool: &SqlitePool) -> Result<HashSet<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as("SELECT url_hash FROM url_hashes")
+        .fetch_all(pool)
+        .await?;
+
+    Ok(rows.into_iter().map(|(hash,)| hash).collect())
+}
+
+pub async fn insert_url_hash(pool: &SqlitePool, url_hash: &str, hn_id: i64) -> Result<()> {
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO url_hashes (url_hash, hn_id, first_seen_at)
+        VALUES (?1, ?2, ?3)
+        "#,
+    )
+    .bind(url_hash)
+    .bind(hn_id)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }

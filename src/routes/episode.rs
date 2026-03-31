@@ -174,7 +174,7 @@ async fn fetch_stories(
         )
     })?;
 
-    let existing_hn_ids = db::get_existing_hn_ids(&state.pool, episode_id)
+    let existing_url_hashes = db::get_existing_url_hashes(&state.pool)
         .await
         .map_err(|e| {
             (
@@ -182,11 +182,9 @@ async fn fetch_stories(
                 Json(ApiResponse::error(&e.to_string())),
             )
         })?;
-    let existing_ids_set: HashSet<i64> = existing_hn_ids.into_iter().collect();
     tracing::info!(
-        "Found {} existing stories for episode {}",
-        existing_ids_set.len(),
-        episode_id
+        "Found {} existing URL hashes in database",
+        existing_url_hashes.len()
     );
 
     let hn_client = HnClient::new();
@@ -200,32 +198,30 @@ async fn fetch_stories(
         )
     })?;
 
-    let ids: Vec<i64> = top_ids
+    let all_top_stories = hn_client.fetch_stories(&top_ids).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(&format!(
+                "Failed to fetch stories: {}",
+                e
+            ))),
+        )
+    })?;
+
+    let top_stories: Vec<crate::db::HnStory> = all_top_stories
         .into_iter()
-        .filter(|id| !existing_ids_set.contains(id))
+        .filter(|s| {
+            let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
+            !existing_url_hashes.contains(&hash)
+        })
         .take(MAX_TOP_STORIES_PER_FETCH)
         .collect();
 
     tracing::info!(
-        "Fetching {} new top stories (filtered out {} duplicates)",
-        ids.len(),
-        existing_ids_set.len()
+        "Fetching {} new top stories (filtered out {} duplicates by URL hash)",
+        top_stories.len(),
+        top_ids.len() - top_stories.len()
     );
-
-    // Fetch top stories details (tag="top")
-    let top_stories = if !ids.is_empty() {
-        hn_client.fetch_stories(&ids).await.map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(&format!(
-                    "Failed to fetch stories: {}",
-                    e
-                ))),
-            )
-        })?
-    } else {
-        Vec::new()
-    };
 
     // Fetch keyword search results from Algolia
     let keywords = get_search_keywords_from_env();
@@ -237,10 +233,13 @@ async fn fetch_stories(
                 Ok(s) => {
                     let filtered: Vec<_> = s
                         .into_iter()
-                        .filter(|s| !existing_ids_set.contains(&s.id))
+                        .filter(|s| {
+                            let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
+                            !existing_url_hashes.contains(&hash)
+                        })
                         .collect();
                     tracing::info!(
-                        "Found {} stories for keyword '{}' ({} new)",
+                        "Found {} stories for keyword '{}' ({} new by URL hash)",
                         filtered.len(),
                         kw,
                         filtered.len()
@@ -262,19 +261,20 @@ async fn fetch_stories(
         Vec::new()
     };
 
-    let mut all_stories: Vec<crate::db::HnStory> = top_stories;
-    let top_ids_set: HashSet<i64> = all_stories.iter().map(|s| s.id).collect();
-    for story in search_stories {
-        if !top_ids_set.contains(&story.id) {
+    // Merge top stories and search results, deduplicate by URL hash
+    let mut all_stories: Vec<crate::db::HnStory> = Vec::new();
+    let mut seen_hashes: HashSet<String> = HashSet::new();
+    for story in top_stories.into_iter().chain(search_stories.into_iter()) {
+        let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
+        if !seen_hashes.contains(&hash) {
+            seen_hashes.insert(hash);
             all_stories.push(story);
         }
     }
 
     tracing::info!(
-        "Total {} unique stories to process ({} top + {} search unique)",
-        all_stories.len(),
-        top_ids_set.len(),
-        all_stories.len() - top_ids_set.len()
+        "Total {} unique stories to process by URL hash",
+        all_stories.len()
     );
 
     if all_stories.is_empty() {
@@ -359,6 +359,11 @@ async fn fetch_stories(
         if let Err(e) = db::save_story(&state.pool, &story).await {
             tracing::error!("Failed to save story {}: {}", story.hn_id, e);
             continue;
+        }
+        // Insert URL hash for deduplication
+        let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
+        if let Err(e) = db::insert_url_hash(&state.pool, &hash, story.hn_id).await {
+            tracing::error!("Failed to insert URL hash for story {}: {}", story.hn_id, e);
         }
         stories_count += 1;
     }
@@ -692,33 +697,30 @@ pub async fn fetch_stories_background(
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let episode_id = db::create_episode(&pool, &today).await?;
 
-    let existing_hn_ids = db::get_existing_hn_ids(&pool, episode_id).await?;
-    let existing_ids_set: HashSet<i64> = existing_hn_ids.into_iter().collect();
+    let existing_url_hashes = db::get_existing_url_hashes(&pool).await?;
     tracing::info!(
-        "Auto-update: Found {} existing stories for episode {}",
-        existing_ids_set.len(),
-        episode_id
+        "Auto-update: Found {} existing URL hashes in database",
+        existing_url_hashes.len()
     );
 
     let hn_client = HnClient::new();
     let top_ids = hn_client.fetch_top_stories().await?;
-    let ids: Vec<i64> = top_ids
+    let all_top_stories = hn_client.fetch_stories(&top_ids).await?;
+
+    let top_stories: Vec<crate::db::HnStory> = all_top_stories
         .into_iter()
-        .filter(|id| !existing_ids_set.contains(id))
+        .filter(|s| {
+            let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
+            !existing_url_hashes.contains(&hash)
+        })
         .take(MAX_TOP_STORIES_PER_FETCH)
         .collect();
 
     tracing::info!(
-        "Auto-update: Fetching {} new top stories (filtered out {} duplicates)",
-        ids.len(),
-        existing_ids_set.len()
+        "Auto-update: Fetching {} new top stories (filtered out {} duplicates by URL hash)",
+        top_stories.len(),
+        top_ids.len() - top_stories.len()
     );
-
-    let top_stories = if !ids.is_empty() {
-        hn_client.fetch_stories(&ids).await?
-    } else {
-        Vec::new()
-    };
 
     let keywords = crate::config::get_search_keywords_from_env();
     let search_stories = if let Some(kws) = keywords {
@@ -729,12 +731,16 @@ pub async fn fetch_stories_background(
                 Ok(s) => {
                     let filtered: Vec<_> = s
                         .into_iter()
-                        .filter(|s| !existing_ids_set.contains(&s.id))
+                        .filter(|s| {
+                            let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
+                            !existing_url_hashes.contains(&hash)
+                        })
                         .collect();
                     tracing::info!(
-                        "Auto-update: Found {} stories for keyword '{}'",
+                        "Auto-update: Found {} stories for keyword '{}' ({} new by URL hash)",
                         filtered.len(),
-                        kw
+                        kw,
+                        filtered.len()
                     );
                     stories.extend(filtered);
                 }
@@ -753,16 +759,19 @@ pub async fn fetch_stories_background(
         Vec::new()
     };
 
-    let mut all_hn_stories: Vec<crate::db::HnStory> = top_stories;
-    let top_ids_set: HashSet<i64> = all_hn_stories.iter().map(|s| s.id).collect();
-    for story in search_stories {
-        if !top_ids_set.contains(&story.id) {
+    // Merge top stories and search results, deduplicate by URL hash
+    let mut all_hn_stories: Vec<crate::db::HnStory> = Vec::new();
+    let mut seen_hashes: HashSet<String> = HashSet::new();
+    for story in top_stories.into_iter().chain(search_stories.into_iter()) {
+        let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
+        if !seen_hashes.contains(&hash) {
+            seen_hashes.insert(hash);
             all_hn_stories.push(story);
         }
     }
 
     tracing::info!(
-        "Auto-update: Total {} unique stories to process",
+        "Auto-update: Total {} unique stories to process by URL hash",
         all_hn_stories.len()
     );
 
@@ -791,6 +800,15 @@ pub async fn fetch_stories_background(
         let mut story: crate::db::Story = hn_story.into();
         story.episode_id = episode_id;
         db::save_story(&pool, &story).await?;
+
+        let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
+        if let Err(e) = db::insert_url_hash(&pool, &hash, story.hn_id).await {
+            tracing::error!(
+                "Auto-update: Failed to insert URL hash for story {}: {}",
+                story.hn_id,
+                e
+            );
+        }
 
         let saved = db::get_story_by_hn_id(&pool, story.hn_id).await?;
         if let Some(saved_story) = saved {
@@ -879,34 +897,31 @@ async fn fetch_stories_stream_task(
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let episode_id = db::create_episode(&pool, &today).await?;
 
-    let existing_hn_ids = db::get_existing_hn_ids(&pool, episode_id).await?;
-    let existing_ids_set: HashSet<i64> = existing_hn_ids.into_iter().collect();
+    // Get existing URL hashes for cross-time deduplication
+    let existing_url_hashes = db::get_existing_url_hashes(&pool).await?;
     tracing::info!(
-        "Found {} existing stories for episode {}",
-        existing_ids_set.len(),
-        episode_id
+        "Found {} existing URL hashes in database",
+        existing_url_hashes.len()
     );
 
     let hn_client = HnClient::new();
     let top_ids = hn_client.fetch_top_stories().await?;
-    let ids: Vec<i64> = top_ids
+    let all_top_stories = hn_client.fetch_stories(&top_ids).await?;
+
+    let top_stories: Vec<crate::db::HnStory> = all_top_stories
         .into_iter()
-        .filter(|id| !existing_ids_set.contains(id))
+        .filter(|s| {
+            let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
+            !existing_url_hashes.contains(&hash)
+        })
         .take(MAX_TOP_STORIES_PER_FETCH)
         .collect();
 
     tracing::info!(
-        "Fetching {} new top stories (filtered out {} duplicates)",
-        ids.len(),
-        existing_ids_set.len()
+        "Fetching {} new top stories (filtered out {} duplicates by URL hash)",
+        top_stories.len(),
+        top_ids.len() - top_stories.len()
     );
-
-    // Fetch top stories details (tag="top")
-    let top_stories = if !ids.is_empty() {
-        hn_client.fetch_stories(&ids).await?
-    } else {
-        Vec::new()
-    };
 
     // Fetch keyword search results from Algolia
     let keywords = crate::config::get_search_keywords_from_env();
@@ -918,10 +933,13 @@ async fn fetch_stories_stream_task(
                 Ok(s) => {
                     let filtered: Vec<_> = s
                         .into_iter()
-                        .filter(|s| !existing_ids_set.contains(&s.id))
+                        .filter(|s| {
+                            let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
+                            !existing_url_hashes.contains(&hash)
+                        })
                         .collect();
                     tracing::info!(
-                        "Found {} stories for keyword '{}' ({} new)",
+                        "Found {} stories for keyword '{}' ({} new by URL hash)",
                         filtered.len(),
                         kw,
                         filtered.len()
@@ -943,16 +961,20 @@ async fn fetch_stories_stream_task(
         Vec::new()
     };
 
-    // Merge top stories and search results, deduplicate by hn_id
-    let mut all_hn_stories: Vec<crate::db::HnStory> = top_stories;
-    let top_ids_set: HashSet<i64> = all_hn_stories.iter().map(|s| s.id).collect();
-    for story in search_stories {
-        if !top_ids_set.contains(&story.id) {
+    let mut all_hn_stories: Vec<crate::db::HnStory> = Vec::new();
+    let mut seen_hashes: HashSet<String> = HashSet::new();
+    for story in top_stories.into_iter().chain(search_stories.into_iter()) {
+        let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
+        if !seen_hashes.contains(&hash) {
+            seen_hashes.insert(hash);
             all_hn_stories.push(story);
         }
     }
 
-    tracing::info!("Total {} unique stories to process", all_hn_stories.len());
+    tracing::info!(
+        "Total {} unique stories to process by URL hash",
+        all_hn_stories.len()
+    );
 
     if all_hn_stories.is_empty() {
         tx.send(SseEvent::Done { stories_count: 0 }).await?;
@@ -973,12 +995,16 @@ async fn fetch_stories_stream_task(
         get_llm_timeout(),
     );
 
-    // Save stories without summaries first and send story_added events
     let mut saved_stories: Vec<(crate::db::Story, i64)> = Vec::new();
     for hn_story in all_hn_stories {
         let mut story: crate::db::Story = hn_story.into();
         story.episode_id = episode_id;
         db::save_story(&pool, &story).await?;
+
+        let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
+        if let Err(e) = db::insert_url_hash(&pool, &hash, story.hn_id).await {
+            tracing::error!("Failed to insert URL hash for story {}: {}", story.hn_id, e);
+        }
 
         let saved = db::get_story_by_hn_id(&pool, story.hn_id).await?;
         if let Some(saved_story) = saved {

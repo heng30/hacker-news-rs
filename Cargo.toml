@@ -22,6 +22,7 @@ tokio = "1.0"
 serde = "1.0"
 anyhow = "1.0"
 chrono = "0.4"
+blake3 = "1.5"
 tracing = "0.1"
 futures = "0.3"
 reqwest = "0.13"
@@ -43,6 +44,7 @@ license.workspace = true
 [dependencies]
 htmd.workspace = true
 axum.workspace = true
+blake3.workspace = true
 anyhow.workspace = true
 futures.workspace = true
 dotenvy.workspace = true
