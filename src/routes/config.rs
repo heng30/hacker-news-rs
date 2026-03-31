@@ -1,12 +1,16 @@
-use crate::{
-    config::{
-        get_auto_update_interval_from_env, get_llm_config_from_env, get_search_keywords_from_env,
-        get_socks5_proxy_from_env,
-    },
-    routes::AppState,
+use crate::routes::AppState;
+use axum::{
+    Router,
+    extract::State,
+    http::StatusCode,
+    response::Json,
+    routing::{get, put},
 };
-use axum::{Router, extract::State, http::StatusCode, response::Json, routing::{get, put}};
-use serde::{Serialize, Deserialize};
+use hacker_news_rs::config::{
+    get_auto_update_interval_from_env, get_llm_config_from_env, get_search_keywords_from_env,
+    get_socks5_proxy_from_env,
+};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Serialize)]
@@ -71,9 +75,7 @@ async fn get_config(
     Ok(Json(ApiResponse::success(response)))
 }
 
-async fn get_lang(
-    state: State<Arc<AppState>>,
-) -> Json<ApiResponse<LangResponse>> {
+async fn get_lang(state: State<Arc<AppState>>) -> Json<ApiResponse<LangResponse>> {
     let lang = state.lang.read().unwrap().clone();
     Json(ApiResponse::success(LangResponse { lang }))
 }
@@ -104,4 +106,3 @@ fn mask_sensitive_value(value: &str) -> String {
         format!("{}****{}", first, last)
     }
 }
-

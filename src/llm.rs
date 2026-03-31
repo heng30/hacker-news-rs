@@ -41,7 +41,7 @@ impl LlmClient {
         lang: &str,
     ) -> Result<(Option<String>, Option<String>)> {
         let content = match url {
-            Some(u) => crate::fetcher::fetch_url_content(u).await?,
+            Some(u) => hacker_news_rs::fetcher::fetch_url_content(u).await?,
             None => None,
         };
 

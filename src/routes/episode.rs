@@ -1,12 +1,4 @@
-use crate::{
-    api::HnClient,
-    config::{
-        get_llm_config_from_env, get_llm_no_stream_from_env, get_llm_timeout,
-        get_llm_user_agent_from_env, get_search_keywords_from_env, get_top_story_min_score_from_env,
-    },
-    db::{self, EpisodeWithStories},
-    llm::LlmClient,
-};
+use crate::llm::LlmClient;
 use axum::{
     Router,
     extract::{Path, Query, State},
@@ -18,6 +10,15 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use futures::stream::Stream;
+use hacker_news_rs::{
+    api::HnClient,
+    config::{
+        get_llm_config_from_env, get_llm_no_stream_from_env, get_llm_timeout,
+        get_llm_user_agent_from_env, get_search_keywords_from_env,
+        get_top_story_min_score_from_env,
+    },
+    db::{self, EpisodeWithStories},
+};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::{collections::HashSet, sync::Arc, sync::RwLock};
@@ -147,7 +148,7 @@ struct FetchRequest {
 
 #[derive(Serialize)]
 struct FetchResponse {
-    episode: crate::db::Episode,
+    episode: hacker_news_rs::db::Episode,
     stories_count: usize,
 }
 
@@ -207,7 +208,7 @@ async fn fetch_stories(
     })?;
 
     let min_score = get_top_story_min_score_from_env();
-    let top_stories: Vec<crate::db::HnStory> = all_top_stories
+    let top_stories: Vec<hacker_news_rs::db::HnStory> = all_top_stories
         .into_iter()
         .filter(|s| {
             let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
@@ -229,7 +230,7 @@ async fn fetch_stories(
         tracing::info!("Searching for keywords: {:?}", kws);
         let mut stories = Vec::new();
         for kw in kws {
-            match hn_client.search_newest(&kw, 10).await {
+            match hn_client.search_newest(&kw).await {
                 Ok(s) => {
                     let filtered: Vec<_> = s
                         .into_iter()
@@ -262,7 +263,7 @@ async fn fetch_stories(
     };
 
     // Merge top stories and search results, deduplicate by URL hash
-    let mut all_stories: Vec<crate::db::HnStory> = Vec::new();
+    let mut all_stories: Vec<hacker_news_rs::db::HnStory> = Vec::new();
     let mut seen_hashes: HashSet<String> = HashSet::new();
     for story in top_stories.into_iter().chain(search_stories.into_iter()) {
         let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
@@ -318,7 +319,7 @@ async fn fetch_stories(
     let mut first_error: Option<String> = None;
 
     for hn_story in all_stories {
-        let mut story: crate::db::Story = hn_story.into();
+        let mut story: hacker_news_rs::db::Story = hn_story.into();
         story.episode_id = episode_id;
 
         tracing::info!(
@@ -402,8 +403,11 @@ async fn fetch_stories(
 async fn get_all_stories(
     State(state): State<Arc<AppState>>,
 ) -> Result<
-    Json<ApiResponse<Vec<crate::db::Story>>>,
-    (StatusCode, Json<ApiResponse<Vec<crate::db::Story>>>),
+    Json<ApiResponse<Vec<hacker_news_rs::db::Story>>>,
+    (
+        StatusCode,
+        Json<ApiResponse<Vec<hacker_news_rs::db::Story>>>,
+    ),
 > {
     let stories = db::get_all_stories(&state.pool).await.map_err(|e| {
         (
@@ -417,8 +421,11 @@ async fn get_all_stories(
 async fn get_episodes_list(
     State(state): State<Arc<AppState>>,
 ) -> Result<
-    Json<ApiResponse<Vec<crate::db::Episode>>>,
-    (StatusCode, Json<ApiResponse<Vec<crate::db::Episode>>>),
+    Json<ApiResponse<Vec<hacker_news_rs::db::Episode>>>,
+    (
+        StatusCode,
+        Json<ApiResponse<Vec<hacker_news_rs::db::Episode>>>,
+    ),
 > {
     let episodes = db::get_episodes(&state.pool).await.map_err(|e| {
         (
@@ -495,7 +502,7 @@ async fn delete_episode_stories(
 
 #[derive(Serialize)]
 struct RegenerateResponse {
-    story: crate::db::Story,
+    story: hacker_news_rs::db::Story,
 }
 
 #[derive(Deserialize)]
@@ -642,7 +649,7 @@ async fn delete_read_stories(
 #[serde(tag = "type")]
 enum SseEvent {
     #[serde(rename = "story_added")]
-    StoryAdded { story: crate::db::Story },
+    StoryAdded { story: hacker_news_rs::db::Story },
     #[serde(rename = "summary_done")]
     SummaryDone {
         hn_id: i64,
@@ -708,7 +715,7 @@ pub async fn fetch_stories_background(
     let all_top_stories = hn_client.fetch_stories(&top_ids).await?;
 
     let min_score = get_top_story_min_score_from_env();
-    let top_stories: Vec<crate::db::HnStory> = all_top_stories
+    let top_stories: Vec<hacker_news_rs::db::HnStory> = all_top_stories
         .into_iter()
         .filter(|s| {
             let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
@@ -724,12 +731,12 @@ pub async fn fetch_stories_background(
         top_ids.len() - top_stories.len()
     );
 
-    let keywords = crate::config::get_search_keywords_from_env();
+    let keywords = hacker_news_rs::config::get_search_keywords_from_env();
     let search_stories = if let Some(kws) = keywords {
         tracing::info!("Auto-update: Searching for keywords: {:?}", kws);
         let mut stories = Vec::new();
         for kw in kws {
-            match hn_client.search_newest(&kw, 10).await {
+            match hn_client.search_newest(&kw).await {
                 Ok(s) => {
                     let filtered: Vec<_> = s
                         .into_iter()
@@ -762,7 +769,7 @@ pub async fn fetch_stories_background(
     };
 
     // Merge top stories and search results, deduplicate by URL hash
-    let mut all_hn_stories: Vec<crate::db::HnStory> = Vec::new();
+    let mut all_hn_stories: Vec<hacker_news_rs::db::HnStory> = Vec::new();
     let mut seen_hashes: HashSet<String> = HashSet::new();
     for story in top_stories.into_iter().chain(search_stories.into_iter()) {
         let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
@@ -797,9 +804,9 @@ pub async fn fetch_stories_background(
     );
 
     // Save stories without summaries first
-    let mut saved_stories: Vec<(crate::db::Story, i64)> = Vec::new();
+    let mut saved_stories: Vec<(hacker_news_rs::db::Story, i64)> = Vec::new();
     for hn_story in all_hn_stories {
-        let mut story: crate::db::Story = hn_story.into();
+        let mut story: hacker_news_rs::db::Story = hn_story.into();
         story.episode_id = episode_id;
         db::save_story(&pool, &story).await?;
 
@@ -911,7 +918,7 @@ async fn fetch_stories_stream_task(
     let all_top_stories = hn_client.fetch_stories(&top_ids).await?;
 
     let min_score = get_top_story_min_score_from_env();
-    let top_stories: Vec<crate::db::HnStory> = all_top_stories
+    let top_stories: Vec<hacker_news_rs::db::HnStory> = all_top_stories
         .into_iter()
         .filter(|s| {
             let hash = db::compute_dedup_hash(s.url.as_deref(), &s.title);
@@ -928,12 +935,12 @@ async fn fetch_stories_stream_task(
     );
 
     // Fetch keyword search results from Algolia
-    let keywords = crate::config::get_search_keywords_from_env();
+    let keywords = hacker_news_rs::config::get_search_keywords_from_env();
     let search_stories = if let Some(kws) = keywords {
         tracing::info!("Searching for keywords: {:?}", kws);
         let mut stories = Vec::new();
         for kw in kws {
-            match hn_client.search_newest(&kw, 10).await {
+            match hn_client.search_newest(&kw).await {
                 Ok(s) => {
                     let filtered: Vec<_> = s
                         .into_iter()
@@ -965,7 +972,7 @@ async fn fetch_stories_stream_task(
         Vec::new()
     };
 
-    let mut all_hn_stories: Vec<crate::db::HnStory> = Vec::new();
+    let mut all_hn_stories: Vec<hacker_news_rs::db::HnStory> = Vec::new();
     let mut seen_hashes: HashSet<String> = HashSet::new();
     for story in top_stories.into_iter().chain(search_stories.into_iter()) {
         let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
@@ -999,9 +1006,9 @@ async fn fetch_stories_stream_task(
         get_llm_timeout(),
     );
 
-    let mut saved_stories: Vec<(crate::db::Story, i64)> = Vec::new();
+    let mut saved_stories: Vec<(hacker_news_rs::db::Story, i64)> = Vec::new();
     for hn_story in all_hn_stories {
-        let mut story: crate::db::Story = hn_story.into();
+        let mut story: hacker_news_rs::db::Story = hn_story.into();
         story.episode_id = episode_id;
         db::save_story(&pool, &story).await?;
 

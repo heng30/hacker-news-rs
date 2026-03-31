@@ -1,30 +1,10 @@
+use super::fetcher::USER_AGENT;
 use crate::db::HnStory;
 use anyhow::Result;
 use serde::Deserialize;
 
+const HN_RSS_BASE: &str = "https://hnrss.org";
 const HN_API_BASE: &str = "https://hacker-news.firebaseio.com/v0";
-const ALGOLIA_API_BASE: &str = "https://hn.algolia.com/api/v1";
-
-#[derive(Debug, Clone, Deserialize)]
-struct AlgoliaHit {
-    #[serde(rename = "objectID")]
-    object_id: String,
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    url: Option<String>,
-    #[serde(default)]
-    author: String,
-    #[serde(default)]
-    points: i64,
-    #[serde(default)]
-    created_at_i: i64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct AlgoliaResponse {
-    hits: Vec<AlgoliaHit>,
-}
 
 pub struct HnClient {
     client: reqwest::Client,
@@ -60,28 +40,16 @@ impl From<HnStoryRaw> for HnStory {
     }
 }
 
-impl From<AlgoliaHit> for HnStory {
-    fn from(h: AlgoliaHit) -> Self {
-        Self {
-            id: h.object_id.parse().unwrap_or(0),
-            title: h.title,
-            url: h.url,
-            by: h.author,
-            score: h.points,
-            time: h.created_at_i,
-            tag: "".to_string(),
-        }
-    }
-}
-
 impl HnClient {
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .user_agent(USER_AGENT)
+                .build()
+                .expect("Failed to create HTTP client"),
         }
     }
 
-    // Fetch top story IDs from Hacker News
     pub async fn fetch_top_stories(&self) -> Result<Vec<i64>> {
         let url = format!("{}/topstories.json", HN_API_BASE);
         let response = self.client.get(&url).send().await?;
@@ -108,48 +76,78 @@ impl HnClient {
         Ok(stories)
     }
 
-    // Search newest stories by keyword using Algolia API
+    // Search newest stories by keyword using hnrss.org RSS API
     // tag parameter is used to mark the search source (the keyword itself)
-    pub async fn search_newest(&self, keyword: &str, limit: usize) -> Result<Vec<HnStory>> {
-        let url = format!(
-            "{}/search_by_date?query={}&tags=story&hitsPerPage={}",
-            ALGOLIA_API_BASE, keyword, limit
-        );
-        tracing::info!(
-            "Searching Algolia for keyword '{}' with limit {}",
-            keyword,
-            limit
-        );
+    pub async fn search_newest(&self, keyword: &str) -> Result<Vec<HnStory>> {
+        let url = format!("{}/newest?q={}", HN_RSS_BASE, keyword);
+        tracing::info!("Searching hnrss for keyword '{}'", keyword);
+
         let response = self.client.get(&url).send().await?;
         let text = response.text().await?;
         tracing::debug!(
-            "Algolia response text (first 500 chars): {}",
+            "hnrss response text (first 500 chars): {}",
             text.chars().take(500).collect::<String>()
         );
 
-        let algolia: AlgoliaResponse = serde_json::from_str(&text).map_err(|e| {
-            tracing::error!(
-                "Failed to parse Algolia response: {}. Response text: {}",
-                e,
-                text.chars().take(1000).collect::<String>()
-            );
-            anyhow::anyhow!("Failed to parse Algolia response: {}", e)
-        })?;
+        let feed = feed_rs::parser::parse(text.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to parse RSS feed: {}", e))?;
+
+        let stories: Vec<HnStory> = feed
+            .entries
+            .iter()
+            .map(|entry| {
+                let id = extract_hn_id_from_entry(entry);
+                let score = extract_score_from_entry(entry);
+                let time = entry.published.map(|dt| dt.timestamp()).unwrap_or(0);
+
+                HnStory {
+                    id,
+                    title: entry
+                        .title
+                        .as_ref()
+                        .map(|t| t.content.clone())
+                        .unwrap_or_default(),
+                    url: entry.links.first().map(|l| l.href.clone()),
+                    by: entry
+                        .authors
+                        .first()
+                        .map(|a| a.name.clone())
+                        .unwrap_or_default(),
+                    score,
+                    time,
+                    tag: keyword.to_string(),
+                }
+            })
+            .collect();
 
         tracing::info!(
-            "Algolia returned {} hits for keyword '{}'",
-            algolia.hits.len(),
+            "hnrss returned {} hits for keyword '{}'",
+            stories.len(),
             keyword
         );
-
-        Ok(algolia
-            .hits
-            .into_iter()
-            .map(|h| {
-                let mut hs: HnStory = h.into();
-                hs.tag = keyword.to_string();
-                hs
-            })
-            .collect())
+        Ok(stories)
     }
+}
+
+fn extract_hn_id_from_entry(entry: &feed_rs::model::Entry) -> i64 {
+    if entry.id.contains("news.ycombinator.com/item?id=")
+        && let Some(id_str) = entry.id.split("id=").last()
+    {
+        return id_str.parse().unwrap_or(0);
+    }
+    0
+}
+
+fn extract_score_from_entry(entry: &feed_rs::model::Entry) -> i64 {
+    if let Some(content) = &entry.content
+        && let Some(body) = &content.body
+    {
+        if let Some(points_start) = body.find("Points: ") {
+            let rest = &body[points_start + 8..];
+            if let Some(points_end) = rest.find('<') {
+                return rest[..points_end].parse().unwrap_or(0);
+            }
+        }
+    }
+    0
 }

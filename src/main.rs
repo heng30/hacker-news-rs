@@ -1,14 +1,9 @@
-mod api;
-mod config;
-mod db;
-mod fetcher;
 mod llm;
 mod routes;
 
 use anyhow::Result;
 use axum::Router;
-use config::AppConfig;
-use db::init_db;
+use hacker_news_rs::{config::AppConfig, db::init_db};
 use routes::{AppState, config::config_routes, episode::episode_routes};
 use sqlx::SqlitePool;
 use std::{
@@ -68,7 +63,7 @@ async fn main() -> Result<()> {
 }
 
 fn background_update_thread(pool: SqlitePool, lang: Arc<RwLock<String>>) {
-    let interval_minutes = config::get_auto_update_interval_from_env();
+    let interval_minutes = hacker_news_rs::config::get_auto_update_interval_from_env();
     if interval_minutes > 0 {
         tokio::spawn(async move {
             let mut interval =
