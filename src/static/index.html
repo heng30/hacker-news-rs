@@ -1,1403 +1,1631 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hacker News RSS Generator</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23ff6600'/%3E%3Ctext x='16' y='23' font-size='18' font-family='Arial,sans-serif' font-weight='bold' fill='white' text-anchor='middle'%3EHN%3C/text%3E%3C/svg%3E">
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23ff6600'/%3E%3Ctext x='16' y='23' font-size='18' font-family='Arial,sans-serif' font-weight='bold' fill='white' text-anchor='middle'%3EHN%3C/text%3E%3C/svg%3E"
+    />
     <style>
-        :root {
-            --bg-primary: #f6f6ef;
-            --bg-secondary: #ffffff;
-            --bg-tertiary: #f0f0f0;
-            --text-primary: #333333;
-            --text-secondary: #666666;
-            --text-muted: #828282;
-            --accent-color: #ff6600;
-            --accent-hover: #e55b00;
-            --border-color: #ddd;
-            --shadow: 0 2px 8px rgba(0,0,0,0.1);
-            --calendar-today: #ff6600;
-            --calendar-has-data: #4a90d9;
-            --calendar-hover: #e0e0e0;
-        }
-
-        [data-theme="dark"] {
-            --bg-primary: #1a1a1a;
-            --bg-secondary: #2d2d2d;
-            --bg-tertiary: #3a3a3a;
-            --text-primary: #e0e0e0;
-            --text-secondary: #b0b0b0;
-            --text-muted: #888888;
-            --accent-color: #994400;
-            --accent-hover: #ff8c34;
-            --border-color: #444444;
-            --shadow: 0 2px 8px rgba(0,0,0,0.3);
-            --calendar-today: #ff7a1a;
-            --calendar-has-data: #5ca0e9;
-            --calendar-hover: #4a4a4a;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            line-height: 1.6;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Navigation Bar */
-        .navbar {
-            background: var(--accent-color);
-            padding: 7px 13px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: var(--shadow);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .navbar-left {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .navbar-center {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-        }
-
-        .navbar-right {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-        }
-
-        .navbar h1 {
-            color: white;
-            font-size: 14px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .nav-logo {
-            flex-shrink: 0;
-        }
-
-        .icon-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            transition: background 0.2s;
-        }
-
-        .icon-btn:hover {
-            background: rgba(255,255,255,0.3);
-        }
-
-        .icon-btn:focus {
-            outline: none;
-        }
-
-        .icon-btn:disabled {
-            background: rgba(255,255,255,0.1);
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
-
-        /* Refresh button animation - only spin when loading */
-        .icon-btn svg {
-            width: 14px;
-            height: 14px;
-            transition: transform 0.3s ease;
-        }
-
-        .icon-btn.loading svg {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        /* Main Layout */
-        .main-container {
-            flex: 1;
-            padding: 20px;
-            max-width: 800px;
-            width: 100%;
-            margin: 0 auto;
-        }
-
-        /* Content Area */
-        .content-area {
-            width: 100%;
-        }
-
-        .stories-container {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            box-shadow: var(--shadow);
-        }
-
-        .story {
-            border-bottom: 1px solid var(--border-color);
-            padding: 15px 20px;
-        }
-
-        .story:last-child {
-            border-bottom: none;
-        }
-
-        .story-title {
-            font-size: 15px;
-            font-weight: 600;
-            margin-bottom: 5px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .story-title a {
-            color: var(--text-primary);
-            text-decoration: none;
-            flex: 1;
-        }
-
-        .story-title a:hover {
-            text-decoration: underline;
-            color: var(--accent-color);
-        }
-
-        .mark-read-btn {
-            background: var(--bg-tertiary);
-            border: none;
-            color: var(--text-muted);
-            width: 28px;
-            height: 28px;
-            border-radius: 4px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            transition: background 0.2s, color 0.2s;
-        }
-
-        .mark-read-btn:hover:not(:disabled) {
-            background: var(--accent-color);
-            color: white;
-        }
-
-        .mark-read-btn:disabled {
-            cursor: default;
-            opacity: 0.5;
-        }
-
-        .story-actions {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .regenerate-btn {
-            background: var(--bg-tertiary);
-            border: none;
-            color: var(--text-muted);
-            width: 28px;
-            height: 28px;
-            border-radius: 4px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            transition: background 0.2s, color 0.2s;
-        }
-
-        .regenerate-btn:hover:not(:disabled) {
-            background: var(--accent-color);
-            color: white;
-        }
-
-        .regenerate-btn:disabled {
-            cursor: default;
-            opacity: 0.7;
-        }
-
-        .regenerate-btn:disabled svg {
-            animation: spin 1s linear infinite;
-        }
-
-        .story-meta {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-        }
-
-        .story-meta a {
-            color: var(--accent-color);
-            text-decoration: none;
-        }
-
-        .story-meta a:hover {
-            text-decoration: underline;
-        }
-
-        .story-tag {
-            color: var(--text-muted);
-        }
-
-        .story-summary {
-            font-size: 14px;
-            color: var(--text-secondary);
-            margin-bottom: 5px;
-            line-height: 1.7;
-        }
-        .story-summary p {
-            margin: 0.5em 0;
-        }
-        .story-summary ul, .story-summary ol {
-            margin: 0.5em 0;
-            padding-left: 1.5em;
-        }
-        .story-summary strong {
-            font-weight: 600;
-        }
-        .story-summary h1, .story-summary h2, .story-summary h3 {
-            margin: 0.5em 0;
-            font-weight: 600;
-        }
-        .story-summary code {
-            background: var(--bg-tertiary);
-            padding: 0.1em 0.3em;
-            border-radius: 3px;
-            font-size: 0.9em;
-        }
-
-        .story-summary.placeholder {
-            color: var(--text-muted);
-            font-style: italic;
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .story.summary-placeholder {
-            opacity: 0.85;
-        }
-
-        .story.clicked .story-title a {
-            color: var(--text-muted);
-        }
-
-        .story.clicked .story-title a:hover {
-            color: var(--text-secondary);
-        }
-
-        /* Calendar Modal */
-        .calendar-modal {
-            max-width: 320px;
-        }
-
-        .calendar-card-modal {
-            padding: 5px 0;
-        }
-
-        .calendar-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 15px;
-        }
-
-        .calendar-header h3 {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .calendar-nav {
-            background: none;
-            border: none;
-            color: var(--accent-color);
-            cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-        }
-
-        .calendar-nav:hover {
-            background: var(--bg-tertiary);
-        }
-
-        .calendar-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 4px;
-        }
-
-        .calendar-day-header {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-align: center;
-            padding: 5px 0;
-        }
-
-        .calendar-day {
-            width: 66%;
-            margin: auto;
-            aspect-ratio: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: background 0.2s;
-            position: relative;
-        }
-
-        .calendar-day:hover {
-            background: var(--calendar-hover);
-        }
-
-        .calendar-day.other-month {
-            color: var(--text-muted);
-            opacity: 0.5;
-        }
-
-        .calendar-day.today {
-            font-weight: 600;
-            position: relative;
-        }
-
-        .calendar-day.today::after {
-            content: '';
-            position: absolute;
-            bottom: 2px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 4px;
-            height: 4px;
-            background: var(--calendar-today);
-            border-radius: 50%;
-        }
-
-        .calendar-day.has-data:not(.today)::after {
-            content: '';
-            position: absolute;
-            bottom: 2px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 4px;
-            height: 4px;
-            background: var(--calendar-has-data);
-            border-radius: 50%;
-        }
-
-        .calendar-day.selected {
-            background: var(--accent-color) !important;
-            color: white !important;
-            font-weight: 600;
-        }
-
-        .calendar-day.selected::after {
-            display: none;
-        }
-
-
-        .calendar-day.empty {
-            cursor: default;
-        }
-
-        .calendar-day.empty:hover {
-            background: transparent;
-        }
-
-        /* Modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 200;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background: var(--bg-secondary);
-            border-radius: 10px;
-            padding: 18px;
-            width: 100%;
-            max-width: 420px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-        }
-
-        .modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 12px;
-        }
-
-        .modal-header h2 {
-            font-size: 15px;
-            font-weight: 600;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 24px;
-            color: var(--text-muted);
-            cursor: pointer;
-            line-height: 1;
-            padding: 0;
-            margin: 0;
-            z-index: 10;
-        }
-
-        .modal-close:hover {
-            color: var(--text-primary);
-        }
-
-        .form-group {
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-        }
-
-        .form-group.data-management {
-            display: block;
-        }
-
-        .form-group.data-management label {
-            display: block;
-            margin-bottom: 8px;
-        }
-
-        .form-group label {
-            font-weight: 500;
-            font-size: 13px;
-            color: var(--text-primary);
-            flex-shrink: 0;
-        }
-
-        .form-group .env-badge {
-            flex-shrink: 0;
-        }
-
-        .env-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 5px 8px;
-            background: var(--bg-tertiary);
-            border-radius: 4px;
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-
-        .env-badge .check-icon {
-            color: #4caf50;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .data-management .modal-actions {
-            margin-top: 8px;
-        }
-
-        .btn-primary {
-            flex: 1;
-            background: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: background 0.2s;
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-hover);
-        }
-
-        .btn-secondary {
-            flex: 1;
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .btn-secondary:hover {
-            background: var(--border-color);
-        }
-
-        .btn-danger {
-            flex: 1;
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: background 0.2s;
-        }
-
-        .btn-danger:hover {
-            background: #c82333;
-        }
-
-        .modal-divider {
-            border-top: 1px solid var(--border-color);
-            margin: 12px 0;
-        }
-
-        /* Loading spinner */
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid currentColor;
-            border-radius: 50%;
-            border-top-color: transparent;
-            animation: spin 0.8s linear infinite;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: var(--text-muted);
-        }
-
-        .empty-icon {
-            margin-bottom: 15px;
-            opacity: 0.6;
-        }
-
-        /* Toast Notification */
-        .toast {
-            position: fixed;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%) translateY(-10px);
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            z-index: 300;
-            opacity: 0;
-            transition: opacity 0.3s, transform 0.3s;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            max-width: 400px;
-            text-align: center;
-        }
-
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        .toast.success {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .toast.error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .toast.loading {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        [data-theme="dark"] .toast.success {
-            background: #1e4620;
-            color: #a8e6ab;
-        }
-
-        [data-theme="dark"] .toast.error {
-            background: #4a1e1e;
-            color: #f8a8a8;
-        }
-
-        [data-theme="dark"] .toast.loading {
-            background: #4a3d1e;
-            color: #ffe082;
-        }
-
-        /* Loading spinner */
-        .loading-spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid currentColor;
-            border-radius: 50%;
-            border-top-color: transparent;
-            animation: spin 0.8s linear infinite;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .navbar h1 {
-                display: none;
-            }
-        }
+      :root {
+          --bg-primary: #f6f6ef;
+          --bg-secondary: #ffffff;
+          --bg-tertiary: #f0f0f0;
+          --text-primary: #333333;
+          --text-secondary: #666666;
+          --text-muted: #828282;
+          --accent-color: #ff6600;
+          --accent-hover: #e55b00;
+          --border-color: #ddd;
+          --shadow: 0 2px 8px rgba(0,0,0,0.1);
+          --calendar-today: #ff6600;
+          --calendar-has-data: #4a90d9;
+          --calendar-hover: #e0e0e0;
+      }
+
+      [data-theme="dark"] {
+          --bg-primary: #1a1a1a;
+          --bg-secondary: #2d2d2d;
+          --bg-tertiary: #3a3a3a;
+          --text-primary: #e0e0e0;
+          --text-secondary: #b0b0b0;
+          --text-muted: #888888;
+          --accent-color: #994400;
+          --accent-hover: #ff8c34;
+          --border-color: #444444;
+          --shadow: 0 2px 8px rgba(0,0,0,0.3);
+          --calendar-today: #ff7a1a;
+          --calendar-has-data: #5ca0e9;
+          --calendar-hover: #4a4a4a;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          line-height: 1.6;
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+      }
+
+      /* Navigation Bar */
+      .navbar {
+          background: var(--accent-color);
+          padding: 7px 13px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          box-shadow: var(--shadow);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+      }
+
+      .navbar-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+      }
+
+      .navbar-center {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+      }
+
+      .navbar-right {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+      }
+
+      .navbar h1 {
+          color: white;
+          font-size: 14px;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+      }
+
+      .nav-logo {
+          flex-shrink: 0;
+      }
+
+      .icon-btn {
+          background: rgba(255,255,255,0.2);
+          border: none;
+          color: white;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          transition: background 0.2s;
+      }
+
+      .icon-btn:hover {
+          background: rgba(255,255,255,0.3);
+      }
+
+      .icon-btn:focus {
+          outline: none;
+      }
+
+      .icon-btn:disabled {
+          background: rgba(255,255,255,0.1);
+          cursor: not-allowed;
+          opacity: 0.5;
+      }
+
+      /* Refresh button animation - only spin when loading */
+      .icon-btn svg {
+          width: 14px;
+          height: 14px;
+          transition: transform 0.3s ease;
+      }
+
+      .icon-btn.loading svg {
+          animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+      }
+
+      /* Main Layout */
+      .main-container {
+          flex: 1;
+          padding: 20px;
+          max-width: 800px;
+          width: 100%;
+          margin: 0 auto;
+      }
+
+      /* Content Area */
+      .content-area {
+          width: 100%;
+      }
+
+      .stories-container {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          box-shadow: var(--shadow);
+      }
+
+      .story {
+          border-bottom: 1px solid var(--border-color);
+          padding: 15px 20px;
+      }
+
+      .story:last-child {
+          border-bottom: none;
+      }
+
+      .story-title {
+          font-size: 15px;
+          font-weight: 600;
+          margin-bottom: 5px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+      }
+
+      .story-title a {
+          color: var(--text-primary);
+          text-decoration: none;
+          flex: 1;
+      }
+
+      .story-title a:hover {
+          text-decoration: underline;
+          color: var(--accent-color);
+      }
+
+      .mark-read-btn {
+          background: var(--bg-tertiary);
+          border: none;
+          color: var(--text-muted);
+          width: 28px;
+          height: 28px;
+          border-radius: 4px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          transition: background 0.2s, color 0.2s;
+      }
+
+      .mark-read-btn:hover:not(:disabled) {
+          background: var(--accent-color);
+          color: white;
+      }
+
+      .mark-read-btn:disabled {
+          cursor: default;
+          opacity: 0.5;
+      }
+
+      .story-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+      }
+
+      .regenerate-btn {
+          background: var(--bg-tertiary);
+          border: none;
+          color: var(--text-muted);
+          width: 28px;
+          height: 28px;
+          border-radius: 4px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          transition: background 0.2s, color 0.2s;
+      }
+
+      .regenerate-btn:hover:not(:disabled) {
+          background: var(--accent-color);
+          color: white;
+      }
+
+      .regenerate-btn:disabled {
+          cursor: default;
+          opacity: 0.7;
+      }
+
+      .regenerate-btn:disabled svg {
+          animation: spin 1s linear infinite;
+      }
+
+      .story-meta {
+          font-size: 12px;
+          color: var(--text-muted);
+          margin-bottom: 8px;
+      }
+
+      .story-meta a {
+          color: var(--accent-color);
+          text-decoration: none;
+      }
+
+      .story-meta a:hover {
+          text-decoration: underline;
+      }
+
+      .story-tag {
+          color: var(--text-muted);
+      }
+
+      .story-summary {
+          font-size: 14px;
+          color: var(--text-secondary);
+          margin-bottom: 5px;
+          line-height: 1.7;
+      }
+      .story-summary p {
+          margin: 0.5em 0;
+      }
+      .story-summary ul, .story-summary ol {
+          margin: 0.5em 0;
+          padding-left: 1.5em;
+      }
+      .story-summary strong {
+          font-weight: 600;
+      }
+      .story-summary h1, .story-summary h2, .story-summary h3 {
+          margin: 0.5em 0;
+          font-weight: 600;
+      }
+      .story-summary code {
+          background: var(--bg-tertiary);
+          padding: 0.1em 0.3em;
+          border-radius: 3px;
+          font-size: 0.9em;
+      }
+
+      .story-summary.placeholder {
+          color: var(--text-muted);
+          font-style: italic;
+          animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+      }
+
+      .story.summary-placeholder {
+          opacity: 0.85;
+      }
+
+      .story.clicked .story-title a {
+          color: var(--text-muted);
+      }
+
+      .story.clicked .story-title a:hover {
+          color: var(--text-secondary);
+      }
+
+      /* Calendar Modal */
+      .calendar-modal {
+          max-width: 320px;
+      }
+
+      .calendar-card-modal {
+          padding: 5px 0;
+      }
+
+      .calendar-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 15px;
+      }
+
+      .calendar-header h3 {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+      }
+
+      .calendar-nav {
+          background: none;
+          border: none;
+          color: var(--accent-color);
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+      }
+
+      .calendar-nav:hover {
+          background: var(--bg-tertiary);
+      }
+
+      .calendar-grid {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 4px;
+      }
+
+      .calendar-day-header {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--text-muted);
+          text-align: center;
+          padding: 5px 0;
+      }
+
+      .calendar-day {
+          width: 66%;
+          margin: auto;
+          aspect-ratio: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          border-radius: 50%;
+          cursor: pointer;
+          transition: background 0.2s;
+          position: relative;
+      }
+
+      .calendar-day:hover {
+          background: var(--calendar-hover);
+      }
+
+      .calendar-day.other-month {
+          color: var(--text-muted);
+          opacity: 0.5;
+      }
+
+      .calendar-day.today {
+          font-weight: 600;
+          position: relative;
+      }
+
+      .calendar-day.today::after {
+          content: '';
+          position: absolute;
+          bottom: 2px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 4px;
+          height: 4px;
+          background: var(--calendar-today);
+          border-radius: 50%;
+      }
+
+      .calendar-day.has-data:not(.today)::after {
+          content: '';
+          position: absolute;
+          bottom: 2px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 4px;
+          height: 4px;
+          background: var(--calendar-has-data);
+          border-radius: 50%;
+      }
+
+      .calendar-day.selected {
+          background: var(--accent-color) !important;
+          color: white !important;
+          font-weight: 600;
+      }
+
+      .calendar-day.selected::after {
+          display: none;
+      }
+
+
+      .calendar-day.empty {
+          cursor: default;
+      }
+
+      .calendar-day.empty:hover {
+          background: transparent;
+      }
+
+      /* Modal */
+      .modal-overlay {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0,0,0,0.5);
+          z-index: 200;
+          align-items: center;
+          justify-content: center;
+      }
+
+      .modal-overlay.active {
+          display: flex;
+      }
+
+      .modal {
+          background: var(--bg-secondary);
+          border-radius: 10px;
+          padding: 18px;
+          width: 100%;
+          max-width: 420px;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      }
+
+      .modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 12px;
+      }
+
+      .modal-header h2 {
+          font-size: 15px;
+          font-weight: 600;
+      }
+
+      .modal-close {
+          background: none;
+          border: none;
+          font-size: 24px;
+          color: var(--text-muted);
+          cursor: pointer;
+          line-height: 1;
+          padding: 0;
+          margin: 0;
+          z-index: 10;
+      }
+
+      .modal-close:hover {
+          color: var(--text-primary);
+      }
+
+      .form-group {
+          margin-bottom: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+      }
+
+      .form-group.data-management {
+          display: block;
+      }
+
+      .form-group.data-management label {
+          display: block;
+          margin-bottom: 8px;
+      }
+
+      .form-group label {
+          font-weight: 500;
+          font-size: 13px;
+          color: var(--text-primary);
+          flex-shrink: 0;
+      }
+
+      .form-group .env-badge {
+          flex-shrink: 0;
+      }
+
+      .env-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 5px 8px;
+          background: var(--bg-tertiary);
+          border-radius: 4px;
+          font-size: 12px;
+          color: var(--text-secondary);
+      }
+
+      .env-badge .check-icon {
+          color: #4caf50;
+      }
+
+      .modal-actions {
+          display: flex;
+          gap: 8px;
+      }
+
+      .data-management .modal-actions {
+          margin-top: 8px;
+      }
+
+      .btn-primary {
+          flex: 1;
+          background: var(--accent-color);
+          color: white;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 500;
+          transition: background 0.2s;
+      }
+
+      .btn-primary:hover {
+          background: var(--accent-hover);
+      }
+
+      .btn-secondary {
+          flex: 1;
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          border: none;
+          padding: 8px 16px;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 500;
+      }
+
+      .btn-secondary:hover {
+          background: var(--border-color);
+      }
+
+      .btn-danger {
+          flex: 1;
+          background: #dc3545;
+          color: white;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 500;
+          transition: background 0.2s;
+      }
+
+      .btn-danger:hover {
+          background: #c82333;
+      }
+
+      .modal-divider {
+          border-top: 1px solid var(--border-color);
+          margin: 12px 0;
+      }
+
+      /* Loading spinner */
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          border: 2px solid currentColor;
+          border-radius: 50%;
+          border-top-color: transparent;
+          animation: spin 0.8s linear infinite;
+          margin-right: 8px;
+          vertical-align: middle;
+      }
+
+      @keyframes spin {
+          to { transform: rotate(360deg); }
+      }
+
+      /* Empty State */
+      .empty-state {
+          text-align: center;
+          padding: 60px 20px;
+          color: var(--text-muted);
+      }
+
+      .empty-icon {
+          margin-bottom: 15px;
+          opacity: 0.6;
+      }
+
+      /* Toast Notification */
+      .toast {
+          position: fixed;
+          top: 80px;
+          left: 50%;
+          transform: translateX(-50%) translateY(-10px);
+          padding: 12px 24px;
+          border-radius: 8px;
+          font-size: 14px;
+          z-index: 300;
+          opacity: 0;
+          transition: opacity 0.3s, transform 0.3s;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          max-width: 400px;
+          text-align: center;
+      }
+
+      .toast.show {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+      }
+
+      .toast.success {
+          background: #d4edda;
+          color: #155724;
+      }
+
+      .toast.error {
+          background: #f8d7da;
+          color: #721c24;
+      }
+
+      .toast.loading {
+          background: #fff3cd;
+          color: #856404;
+      }
+
+      [data-theme="dark"] .toast.success {
+          background: #1e4620;
+          color: #a8e6ab;
+      }
+
+      [data-theme="dark"] .toast.error {
+          background: #4a1e1e;
+          color: #f8a8a8;
+      }
+
+      [data-theme="dark"] .toast.loading {
+          background: #4a3d1e;
+          color: #ffe082;
+      }
+
+      /* Loading spinner */
+      .loading-spinner {
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          border: 2px solid currentColor;
+          border-radius: 50%;
+          border-top-color: transparent;
+          animation: spin 0.8s linear infinite;
+          margin-right: 8px;
+          vertical-align: middle;
+      }
+
+      @keyframes spin {
+          to { transform: rotate(360deg); }
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+          .navbar h1 {
+              display: none;
+          }
+      }
     </style>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-</head>
-<body>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  </head>
+  <body>
     <!-- Navigation Bar -->
     <nav class="navbar">
-        <div class="navbar-left">
-            <h1>
-                <svg class="nav-logo" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 4h16v16H4z"/>
-                    <path d="M9 9h6M9 12h6M9 15h4"/>
-                </svg>
-                Hacker News RSS
-            </h1>
-        </div>
-        <div class="navbar-right">
-            <button class="icon-btn" id="refreshBtn" title="Refresh stories" onclick="fetchStories()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 12a9 9 0 11-2.636-6.364"/>
-                    <path d="M21 3v6h-6"/>
-                </svg>
-            </button>
-            <button class="icon-btn" id="toggleReadBtn" title="Show only unread">
-                <svg id="iconShowAll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                    <path d="M8 7h8M8 11h8M8 15h5"/>
-                </svg>
-                <svg id="iconShowOnlyUnread" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                </svg>
-            </button>
-            <button class="icon-btn" id="calendarBtn" title="Calendar">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                    <line x1="16" y1="2" x2="16" y2="6"/>
-                    <line x1="8" y1="2" x2="8" y2="6"/>
-                    <line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-            </button>
-            <button class="icon-btn" id="languageToggle" title="Toggle language">
-                <svg id="langIconEn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <text x="12" y="17" font-size="18" font-family="Arial, sans-serif" font-weight="bold" fill="currentColor" stroke="none" text-anchor="middle">EN</text>
-                </svg>
-                <svg id="langIconZh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
-                    <text x="12" y="17" font-size="18" font-family="Arial, sans-serif" font-weight="bold" fill="currentColor" stroke="none" text-anchor="middle">中</text>
-                </svg>
-            </button>
-            <button class="icon-btn" id="themeToggle" title="Toggle theme">
-                <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-                <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
-                    <circle cx="12" cy="12" r="5"/>
-                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                </svg>
-            </button>
-            <button class="icon-btn" id="configBtn" title="Settings">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-            </button>
-            <a href="https://github.com/heng30/hacker-news-rs" target="_blank" rel="noopener noreferrer" class="icon-btn" title="GitHub" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-                </svg>
-            </a>
-        </div>
+      <div class="navbar-left">
+        <h1>
+          <svg
+            class="nav-logo"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M4 4h16v16H4z" />
+            <path d="M9 9h6M9 12h6M9 15h4" />
+          </svg>
+          Hacker News RSS
+        </h1>
+      </div>
+      <div class="navbar-right">
+        <button
+          class="icon-btn"
+          id="refreshBtn"
+          title="Refresh stories"
+          onclick="fetchStories()"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12a9 9 0 11-2.636-6.364" />
+            <path d="M21 3v6h-6" />
+          </svg>
+        </button>
+        <button class="icon-btn" id="toggleReadBtn" title="Show only unread">
+          <svg
+            id="iconShowAll"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path
+              d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
+            />
+            <path d="M8 7h8M8 11h8M8 15h5" />
+          </svg>
+          <svg
+            id="iconShowOnlyUnread"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            style="display: none"
+          >
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+        <button class="icon-btn" id="calendarBtn" title="Calendar">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+        </button>
+        <button class="icon-btn" id="languageToggle" title="Toggle language">
+          <svg
+            id="langIconEn"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <text
+              x="12"
+              y="17"
+              font-size="18"
+              font-family="Arial, sans-serif"
+              font-weight="bold"
+              fill="currentColor"
+              stroke="none"
+              text-anchor="middle"
+            >
+              EN
+            </text>
+          </svg>
+          <svg
+            id="langIconZh"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            style="display: none"
+          >
+            <text
+              x="12"
+              y="17"
+              font-size="18"
+              font-family="Arial, sans-serif"
+              font-weight="bold"
+              fill="currentColor"
+              stroke="none"
+              text-anchor="middle"
+            >
+              中
+            </text>
+          </svg>
+        </button>
+        <button class="icon-btn" id="themeToggle" title="Toggle theme">
+          <svg
+            id="themeIconMoon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+          <svg
+            id="themeIconSun"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            style="display: none"
+          >
+            <circle cx="12" cy="12" r="5" />
+            <path
+              d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+            />
+          </svg>
+        </button>
+        <button class="icon-btn" id="configBtn" title="Settings">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+            />
+          </svg>
+        </button>
+        <a
+          href="https://github.com/heng30/hacker-news-rs"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="icon-btn"
+          title="GitHub"
+          style="
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          "
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <path
+              d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"
+            />
+          </svg>
+        </a>
+      </div>
     </nav>
 
     <!-- Main Container -->
     <main class="main-container">
-        <!-- Content Area -->
-        <div class="content-area">
-            <div class="stories-container" id="storiesContainer">
-                <div class="empty-state">
-                    <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path d="M4 4h16v16H4z"/>
-                        <path d="M9 9h6M9 12h6M9 15h4"/>
-                    </svg>
-                    <p>No episode loaded</p>
-                    <p style="font-size: 13px; margin-top: 8px;">Click "Fetch Stories" or select a date from the calendar</p>
-                </div>
-            </div>
+      <!-- Content Area -->
+      <div class="content-area">
+        <div class="stories-container" id="storiesContainer">
+          <div class="empty-state">
+            <svg
+              class="empty-icon"
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M4 4h16v16H4z" />
+              <path d="M9 9h6M9 12h6M9 15h4" />
+            </svg>
+            <p>No episode loaded</p>
+            <p style="font-size: 13px; margin-top: 8px">
+              Click "Fetch Stories" or select a date from the calendar
+            </p>
+          </div>
         </div>
+      </div>
     </main>
 
     <!-- Calendar Modal -->
     <div class="modal-overlay" id="calendarModal">
-        <div class="modal calendar-modal">
-            <div class="modal-header">
-                <h2>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                        <line x1="16" y1="2" x2="16" y2="6"/>
-                        <line x1="8" y1="2" x2="8" y2="6"/>
-                        <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    Calendar
-                </h2>
-                <button class="modal-close" onclick="closeCalendarModal()">&times;</button>
-            </div>
-            <div class="calendar-card-modal">
-                <div class="calendar-header">
-                    <button class="calendar-nav" onclick="changeMonth(-1)">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M15 18l-6-6 6-6"/>
-                        </svg>
-                    </button>
-                    <h3 id="calendarTitle">March 2026</h3>
-                    <button class="calendar-nav" onclick="changeMonth(1)">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 18l6-6-6-6"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="calendar-grid" id="calendarGrid">
-                    <!-- Calendar will be generated here -->
-                </div>
-            </div>
+      <div class="modal calendar-modal">
+        <div class="modal-header">
+          <h2>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              style="vertical-align: middle; margin-right: 6px"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            Calendar
+          </h2>
+          <button class="modal-close" onclick="closeCalendarModal()">
+            &times;
+          </button>
         </div>
+        <div class="calendar-card-modal">
+          <div class="calendar-header">
+            <button class="calendar-nav" onclick="changeMonth(-1)">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <h3 id="calendarTitle">March 2026</h3>
+            <button class="calendar-nav" onclick="changeMonth(1)">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+          </div>
+          <div class="calendar-grid" id="calendarGrid">
+            <!-- Calendar will be generated here -->
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Config Modal (Read-only) -->
     <div class="modal-overlay" id="configModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2 id="configModalTitle">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                    </svg>
-                    <span id="configModalTitleText">Configuration</span>
-                </h2>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
-            </div>
-
-            <div class="form-group">
-                <label id="configLabelApiBaseUrl">API Base URL</label>
-                <div id="apiBaseUrlContainer">
-                    <div class="env-badge">
-                        <span>-</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label id="configLabelModel">Model</label>
-                <div id="modelContainer">
-                    <div class="env-badge">
-                        <span>-</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label id="configLabelApiKey">API Key</label>
-                <div id="apiKeyContainer">
-                    <div class="env-badge">
-                        <span>-</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label id="configLabelSocks5">SOCKS5 Proxy</label>
-                <div id="socks5Container">
-                    <div class="env-badge">
-                        <span>-</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label id="configLabelSearchKeywords">Search Keywords</label>
-                <div id="searchKeywordsContainer">
-                    <div class="env-badge">
-                        <span>-</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label id="configLabelAutoUpdate">Auto Update</label>
-                <div id="autoUpdateContainer">
-                    <div class="env-badge">
-                        <span>-</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="modal-divider"></div>
-
-            <div class="form-group data-management">
-                <label id="configLabelDataManagement">Data Management</label>
-                <div class="modal-actions">
-                    <button class="btn-secondary" id="removeAllReadBtn" onclick="removeAllReadStories()">
-                        <span id="removeAllReadText">Remove all read stories</span>
-                    </button>
-                    <button class="btn-danger" id="removeAllBtn" onclick="removeAllStories()">
-                        <span id="removeAllText">Remove all stories</span>
-                    </button>
-                </div>
-            </div>
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="configModalTitle">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              style="vertical-align: middle; margin-right: 6px"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+              />
+            </svg>
+            <span id="configModalTitleText">Configuration</span>
+          </h2>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
         </div>
+
+        <div class="form-group">
+          <label id="configLabelApiBaseUrl">API Base URL</label>
+          <div id="apiBaseUrlContainer">
+            <div class="env-badge">
+              <span>-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label id="configLabelModel">Model</label>
+          <div id="modelContainer">
+            <div class="env-badge">
+              <span>-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label id="configLabelApiKey">API Key</label>
+          <div id="apiKeyContainer">
+            <div class="env-badge">
+              <span>-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label id="configLabelSocks5">SOCKS5 Proxy</label>
+          <div id="socks5Container">
+            <div class="env-badge">
+              <span>-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label id="configLabelSearchKeywords">Search Keywords</label>
+          <div id="searchKeywordsContainer">
+            <div class="env-badge">
+              <span>-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label id="configLabelAutoUpdate">Auto Update</label>
+          <div id="autoUpdateContainer">
+            <div class="env-badge">
+              <span>-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-divider"></div>
+
+        <div class="form-group data-management">
+          <label id="configLabelDataManagement">Data Management</label>
+          <div class="modal-actions">
+            <button
+              class="btn-secondary"
+              id="removeAllReadBtn"
+              onclick="removeAllReadStories()"
+            >
+              <span id="removeAllReadText">Remove all read stories</span>
+            </button>
+            <button
+              class="btn-danger"
+              id="removeAllBtn"
+              onclick="removeAllStories()"
+            >
+              <span id="removeAllText">Remove all stories</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
     <script>
-        // State
-        let currentMonth = new Date();
-        let selectedDate = null;
-        let episodesWithDates = new Set();
-        let currentLang = localStorage.getItem('lang') || 'en';
-        let showOnlyRead = localStorage.getItem('showOnlyRead') === 'true';
+      // State
+      let currentMonth = new Date();
+      let selectedDate = null;
+      let episodesWithDates = new Set();
+      let currentLang = localStorage.getItem("lang") || "en";
+      let showOnlyRead = localStorage.getItem("showOnlyRead") === "true";
 
-        // i18n messages
-        const i18n = {
-            en: {
-                emptyNoEpisode: 'No episode loaded',
-                emptyHint: 'Click refresh button or select a date from the calendar',
-                emptyNoEpisodes: 'No episodes found',
-                emptyCreateHint: 'Click refresh button to create one',
-                emptyNotFound: 'Episode not found',
-                emptyNoStories: 'No stories in this episode',
-                emptyError: 'Error loading episode',
-                summaryLabel: 'Summary',
-                summaryZhLabel: '中文摘要',
-                fetching: 'Fetching stories from Hacker News and generating summaries...',
-                fetchedSuccess: 'Fetched {count} stories for {date}',
-                configTitle: 'Configuration',
-                configAutoUpdateInterval: 'Auto Update Interval',
-                configApiBaseUrl: 'API Base URL',
-                configModel: 'Model',
-                configApiKey: 'API Key',
-                configSocks5: 'SOCKS5 Proxy',
-                configSearchKeywords: 'Search Keywords',
-                configDisabled: 'Disabled',
-                configMinutes: '{minutes} min',
-                configSetViaEnv: 'Set via environment',
-                configSetViaDb: 'Set via database',
-                configDataManagement: 'Data Management',
-                markRead: 'Mark as read',
-                removeAllStories: 'Remove all stories',
-                removeAllReadStories: 'Remove all read stories',
-                confirmRemoveAll: 'Are you sure you want to remove all stories?',
-                confirmRemoveRead: 'Are you sure you want to remove all read stories?',
-                removed: 'Removed {count} stories',
-                regeneratingSummary: 'Regenerating summary...',
-                summaryRegenerated: 'Summary regenerated successfully',
-                regenerateSummary: 'Regenerate summary',
-                pointsBy: '{score} points by {author}',
-                discuss: 'discuss',
-                showAllStories: 'Show all stories',
-                showOnlyUnread: 'Show only unread'
-            },
-            zh: {
-                emptyNoEpisode: '暂无内容',
-                emptyHint: '点击刷新按钮或从日历中选择日期',
-                emptyNoEpisodes: '暂无数据',
-                emptyCreateHint: '点击刷新按钮创建',
-                emptyNotFound: '未找到该日期的内容',
-                emptyNoStories: '该日期暂无内容',
-                emptyError: '加载失败',
-                summaryLabel: '摘要',
-                summaryZhLabel: '中文摘要',
-                fetching: '正在获取 Hacker News 故事并生成摘要...',
-                fetchedSuccess: '已获取 {count} 条故事，日期：{date}',
-                configTitle: '配置',
-                configAutoUpdateInterval: '自动更新间隔',
-                configApiBaseUrl: 'API 地址',
-                configModel: '模型',
-                configApiKey: 'API 密钥',
-                configSocks5: 'SOCKS5 代理',
-                configSearchKeywords: '搜索关键字',
-                configDisabled: '已禁用',
-                configMinutes: '{minutes} 分钟',
-                configSetViaEnv: '通过环境变量设置',
-                configSetViaDb: '通过数据库设置',
-                configDataManagement: '数据管理',
-                markRead: '标记已读',
-                removeAllStories: '移除所有条目',
-                removeAllReadStories: '移除所有已读条目',
-                confirmRemoveAll: '确定要移除所有条目吗？',
-                confirmRemoveRead: '确定要移除所有已读条目吗？',
-                removed: '已移除 {count} 条故事',
-                regeneratingSummary: '正在重新生成摘要...',
-                summaryRegenerated: '摘要已重新生成',
-                regenerateSummary: '重新生成摘要',
-                pointsBy: '{score} 分，作者：{author}',
-                discuss: '评论',
-                showAllStories: '显示全部条目',
-                showOnlyUnread: '只显示未读'
+      // i18n messages
+      const i18n = {
+        en: {
+          emptyNoEpisode: "No episode loaded",
+          emptyHint: "Click refresh button or select a date from the calendar",
+          emptyNoEpisodes: "No episodes found",
+          emptyCreateHint: "Click refresh button to create one",
+          emptyNotFound: "Episode not found",
+          emptyNoStories: "No stories in this episode",
+          emptyError: "Error loading episode",
+          summaryLabel: "Summary",
+          summaryZhLabel: "中文摘要",
+          fetching:
+            "Fetching stories from Hacker News and generating summaries...",
+          fetchedSuccess: "Fetched {count} stories for {date}",
+          configTitle: "Configuration",
+          configAutoUpdateInterval: "Auto Update Interval",
+          configApiBaseUrl: "API Base URL",
+          configModel: "Model",
+          configApiKey: "API Key",
+          configSocks5: "SOCKS5 Proxy",
+          configSearchKeywords: "Search Keywords",
+          configDisabled: "Disabled",
+          configMinutes: "{minutes} min",
+          configSetViaEnv: "Set via environment",
+          configSetViaDb: "Set via database",
+          configDataManagement: "Data Management",
+          markRead: "Mark as read",
+          removeAllStories: "Remove all stories",
+          removeAllReadStories: "Remove all read stories",
+          confirmRemoveAll: "Are you sure you want to remove all stories?",
+          confirmRemoveRead:
+            "Are you sure you want to remove all read stories?",
+          removed: "Removed {count} stories",
+          regeneratingSummary: "Regenerating summary...",
+          summaryRegenerated: "Summary regenerated successfully",
+          regenerateSummary: "Regenerate summary",
+          pointsBy: "{score} points by {author}",
+          discuss: "discuss",
+          showAllStories: "Show all stories",
+          showOnlyUnread: "Show only unread",
+        },
+        zh: {
+          emptyNoEpisode: "暂无内容",
+          emptyHint: "点击刷新按钮或从日历中选择日期",
+          emptyNoEpisodes: "暂无数据",
+          emptyCreateHint: "点击刷新按钮创建",
+          emptyNotFound: "未找到该日期的内容",
+          emptyNoStories: "该日期暂无内容",
+          emptyError: "加载失败",
+          summaryLabel: "摘要",
+          summaryZhLabel: "中文摘要",
+          fetching: "正在获取 Hacker News 故事并生成摘要...",
+          fetchedSuccess: "已获取 {count} 条故事，日期：{date}",
+          configTitle: "配置",
+          configAutoUpdateInterval: "自动更新间隔",
+          configApiBaseUrl: "API 地址",
+          configModel: "模型",
+          configApiKey: "API 密钥",
+          configSocks5: "SOCKS5 代理",
+          configSearchKeywords: "搜索关键字",
+          configDisabled: "已禁用",
+          configMinutes: "{minutes} 分钟",
+          configSetViaEnv: "通过环境变量设置",
+          configSetViaDb: "通过数据库设置",
+          configDataManagement: "数据管理",
+          markRead: "标记已读",
+          removeAllStories: "移除所有条目",
+          removeAllReadStories: "移除所有已读条目",
+          confirmRemoveAll: "确定要移除所有条目吗？",
+          confirmRemoveRead: "确定要移除所有已读条目吗？",
+          removed: "已移除 {count} 条故事",
+          regeneratingSummary: "正在重新生成摘要...",
+          summaryRegenerated: "摘要已重新生成",
+          regenerateSummary: "重新生成摘要",
+          pointsBy: "{score} 分，作者：{author}",
+          discuss: "评论",
+          showAllStories: "显示全部条目",
+          showOnlyUnread: "只显示未读",
+        },
+      };
+
+      function t(key, replacements = {}) {
+        let text = i18n[currentLang][key] || i18n["en"][key] || key;
+        for (const [k, v] of Object.entries(replacements)) {
+          text = text.replace(`{${k}}`, v);
+        }
+        return text;
+      }
+
+      // Theme Management
+      function initTheme() {
+        const savedTheme = localStorage.getItem("theme") || "light";
+        document.documentElement.setAttribute("data-theme", savedTheme);
+        updateThemeIcon(savedTheme);
+      }
+
+      function toggleTheme() {
+        const current = document.documentElement.getAttribute("data-theme");
+        const next = current === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        localStorage.setItem("theme", next);
+        updateThemeIcon(next);
+      }
+
+      function updateThemeIcon(theme) {
+        const moonIcon = document.getElementById("themeIconMoon");
+        const sunIcon = document.getElementById("themeIconSun");
+        if (theme === "dark") {
+          moonIcon.style.display = "none";
+          sunIcon.style.display = "block";
+        } else {
+          moonIcon.style.display = "block";
+          sunIcon.style.display = "none";
+        }
+      }
+
+      // Language Toggle
+      function initLanguage() {
+        const savedLang = localStorage.getItem("lang") || "en";
+        currentLang = savedLang;
+        updateLanguageIcon();
+        syncLangToBackend();
+      }
+
+      function toggleLanguage() {
+        currentLang = currentLang === "en" ? "zh" : "en";
+        localStorage.setItem("lang", currentLang);
+        updateLanguageIcon();
+        syncLangToBackend();
+        // Refresh current view if there's content
+        if (selectedDate) {
+          loadEpisode(selectedDate);
+        } else {
+          loadLatestEpisode();
+        }
+      }
+
+      async function syncLangToBackend() {
+        try {
+          await fetch("/api/lang", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lang: currentLang }),
+          });
+        } catch (e) {
+          console.warn("Failed to sync language to backend:", e);
+        }
+      }
+
+      function updateLanguageIcon() {
+        const enIcon = document.getElementById("langIconEn");
+        const zhIcon = document.getElementById("langIconZh");
+        if (currentLang === "zh") {
+          enIcon.style.display = "none";
+          zhIcon.style.display = "block";
+        } else {
+          enIcon.style.display = "block";
+          zhIcon.style.display = "none";
+        }
+      }
+
+      // Show Only Read Toggle
+      function initShowOnlyRead() {
+        showOnlyRead = localStorage.getItem("showOnlyRead") === "true";
+        updateShowOnlyReadIcon();
+      }
+
+      function toggleShowOnlyRead() {
+        showOnlyRead = !showOnlyRead;
+        localStorage.setItem("showOnlyRead", showOnlyRead);
+        updateShowOnlyReadIcon();
+        refreshStoriesList();
+      }
+
+      function updateShowOnlyReadIcon() {
+        const showAllIcon = document.getElementById("iconShowAll");
+        const showOnlyUnreadIcon =
+          document.getElementById("iconShowOnlyUnread");
+        const btn = document.getElementById("toggleReadBtn");
+        if (showOnlyRead) {
+          showAllIcon.style.display = "none";
+          showOnlyUnreadIcon.style.display = "block";
+          btn.title = t("showAllStories");
+        } else {
+          showAllIcon.style.display = "block";
+          showOnlyUnreadIcon.style.display = "none";
+          btn.title = t("showOnlyUnread");
+        }
+      }
+
+      // Toast Notification
+      function showToast(message, type = "success", duration = null) {
+        const toast = document.getElementById("toast");
+        toast.textContent = message;
+        toast.className = `toast ${type} show`;
+
+        // Auto-set duration based on type if not specified
+        const actualDuration = duration ?? (type === "error" ? 5000 : 3000);
+
+        if (actualDuration > 0) {
+          setTimeout(() => {
+            toast.classList.remove("show");
+          }, actualDuration);
+        }
+      }
+
+      function hideToast() {
+        const toast = document.getElementById("toast");
+        toast.classList.remove("show");
+      }
+
+      // Modal Management
+      function openModal() {
+        document.getElementById("configModal").classList.add("active");
+        // Update modal labels with current language
+        document.getElementById("configModalTitleText").textContent =
+          t("configTitle");
+        document.getElementById("configLabelAutoUpdate").textContent = t(
+          "configAutoUpdateInterval",
+        );
+        document.getElementById("configLabelApiBaseUrl").textContent =
+          t("configApiBaseUrl");
+        document.getElementById("configLabelModel").textContent =
+          t("configModel");
+        document.getElementById("configLabelApiKey").textContent =
+          t("configApiKey");
+        document.getElementById("configLabelSocks5").textContent =
+          t("configSocks5");
+        document.getElementById("configLabelSearchKeywords").textContent = t(
+          "configSearchKeywords",
+        );
+        document.getElementById("configLabelDataManagement").textContent = t(
+          "configDataManagement",
+        );
+        document.getElementById("removeAllReadText").textContent = t(
+          "removeAllReadStories",
+        );
+        document.getElementById("removeAllText").textContent =
+          t("removeAllStories");
+        loadConfig();
+      }
+
+      function closeModal() {
+        document.getElementById("configModal").classList.remove("active");
+      }
+
+      function openCalendarModal() {
+        document.getElementById("calendarModal").classList.add("active");
+        renderCalendar();
+      }
+
+      function closeCalendarModal() {
+        document.getElementById("calendarModal").classList.remove("active");
+      }
+
+      // Initialize
+      document.addEventListener("DOMContentLoaded", async () => {
+        initTheme();
+        initLanguage();
+        initShowOnlyRead();
+
+        document
+          .getElementById("themeToggle")
+          .addEventListener("click", toggleTheme);
+        document
+          .getElementById("languageToggle")
+          .addEventListener("click", toggleLanguage);
+        document
+          .getElementById("toggleReadBtn")
+          .addEventListener("click", toggleShowOnlyRead);
+        document
+          .getElementById("configBtn")
+          .addEventListener("click", openModal);
+        document
+          .getElementById("calendarBtn")
+          .addEventListener("click", openCalendarModal);
+
+        document
+          .getElementById("configModal")
+          .addEventListener("click", (e) => {
+            if (e.target.id === "configModal") closeModal();
+          });
+
+        document
+          .getElementById("calendarModal")
+          .addEventListener("click", (e) => {
+            if (e.target.id === "calendarModal") closeCalendarModal();
+          });
+
+        // ESC key to close modals
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            const configModal = document.getElementById("configModal");
+            const calendarModal = document.getElementById("calendarModal");
+
+            if (configModal.classList.contains("active")) {
+              closeModal();
+            } else if (calendarModal.classList.contains("active")) {
+              closeCalendarModal();
             }
-        };
-
-        function t(key, replacements = {}) {
-            let text = i18n[currentLang][key] || i18n['en'][key] || key;
-            for (const [k, v] of Object.entries(replacements)) {
-                text = text.replace(`{${k}}`, v);
-            }
-            return text;
-        }
-
-        // Theme Management
-        function initTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            updateThemeIcon(savedTheme);
-        }
-
-        function toggleTheme() {
-            const current = document.documentElement.getAttribute('data-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', next);
-            localStorage.setItem('theme', next);
-            updateThemeIcon(next);
-        }
-
-        function updateThemeIcon(theme) {
-            const moonIcon = document.getElementById('themeIconMoon');
-            const sunIcon = document.getElementById('themeIconSun');
-            if (theme === 'dark') {
-                moonIcon.style.display = 'none';
-                sunIcon.style.display = 'block';
-            } else {
-                moonIcon.style.display = 'block';
-                sunIcon.style.display = 'none';
-            }
-        }
-
-        // Language Toggle
-        function initLanguage() {
-            const savedLang = localStorage.getItem('lang') || 'en';
-            currentLang = savedLang;
-            updateLanguageIcon();
-            syncLangToBackend();
-        }
-
-        function toggleLanguage() {
-            currentLang = currentLang === 'en' ? 'zh' : 'en';
-            localStorage.setItem('lang', currentLang);
-            updateLanguageIcon();
-            syncLangToBackend();
-            // Refresh current view if there's content
-            if (selectedDate) {
-                loadEpisode(selectedDate);
-            } else {
-                loadLatestEpisode();
-            }
-        }
-
-        async function syncLangToBackend() {
-            try {
-                await fetch('/api/lang', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lang: currentLang })
-                });
-            } catch (e) {
-                console.warn('Failed to sync language to backend:', e);
-            }
-        }
-
-        function updateLanguageIcon() {
-            const enIcon = document.getElementById('langIconEn');
-            const zhIcon = document.getElementById('langIconZh');
-            if (currentLang === 'zh') {
-                enIcon.style.display = 'none';
-                zhIcon.style.display = 'block';
-            } else {
-                enIcon.style.display = 'block';
-                zhIcon.style.display = 'none';
-            }
-        }
-
-        // Show Only Read Toggle
-        function initShowOnlyRead() {
-            showOnlyRead = localStorage.getItem('showOnlyRead') === 'true';
-            updateShowOnlyReadIcon();
-        }
-
-        function toggleShowOnlyRead() {
-            showOnlyRead = !showOnlyRead;
-            localStorage.setItem('showOnlyRead', showOnlyRead);
-            updateShowOnlyReadIcon();
-            refreshStoriesList();
-        }
-
-        function updateShowOnlyReadIcon() {
-            const showAllIcon = document.getElementById('iconShowAll');
-            const showOnlyUnreadIcon = document.getElementById('iconShowOnlyUnread');
-            const btn = document.getElementById('toggleReadBtn');
-            if (showOnlyRead) {
-                showAllIcon.style.display = 'none';
-                showOnlyUnreadIcon.style.display = 'block';
-                btn.title = t('showAllStories');
-            } else {
-                showAllIcon.style.display = 'block';
-                showOnlyUnreadIcon.style.display = 'none';
-                btn.title = t('showOnlyUnread');
-            }
-        }
-
-        // Toast Notification
-        function showToast(message, type = 'success', duration = null) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = `toast ${type} show`;
-
-            // Auto-set duration based on type if not specified
-            const actualDuration = duration ?? (type === 'error' ? 5000 : 3000);
-
-            if (actualDuration > 0) {
-                setTimeout(() => {
-                    toast.classList.remove('show');
-                }, actualDuration);
-            }
-        }
-
-        function hideToast() {
-            const toast = document.getElementById('toast');
-            toast.classList.remove('show');
-        }
-
-        // Modal Management
-        function openModal() {
-            document.getElementById('configModal').classList.add('active');
-            // Update modal labels with current language
-            document.getElementById('configModalTitleText').textContent = t('configTitle');
-            document.getElementById('configLabelAutoUpdate').textContent = t('configAutoUpdateInterval');
-            document.getElementById('configLabelApiBaseUrl').textContent = t('configApiBaseUrl');
-            document.getElementById('configLabelModel').textContent = t('configModel');
-            document.getElementById('configLabelApiKey').textContent = t('configApiKey');
-            document.getElementById('configLabelSocks5').textContent = t('configSocks5');
-            document.getElementById('configLabelSearchKeywords').textContent = t('configSearchKeywords');
-            document.getElementById('configLabelDataManagement').textContent = t('configDataManagement');
-            document.getElementById('removeAllReadText').textContent = t('removeAllReadStories');
-            document.getElementById('removeAllText').textContent = t('removeAllStories');
-            loadConfig();
-        }
-
-        function closeModal() {
-            document.getElementById('configModal').classList.remove('active');
-        }
-
-        function openCalendarModal() {
-            document.getElementById('calendarModal').classList.add('active');
-            renderCalendar();
-        }
-
-        function closeCalendarModal() {
-            document.getElementById('calendarModal').classList.remove('active');
-        }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', async () => {
-            initTheme();
-            initLanguage();
-            initShowOnlyRead();
-
-            document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-            document.getElementById('languageToggle').addEventListener('click', toggleLanguage);
-            document.getElementById('toggleReadBtn').addEventListener('click', toggleShowOnlyRead);
-            document.getElementById('configBtn').addEventListener('click', openModal);
-            document.getElementById('calendarBtn').addEventListener('click', openCalendarModal);
-
-            document.getElementById('configModal').addEventListener('click', (e) => {
-                if (e.target.id === 'configModal') closeModal();
-            });
-
-            document.getElementById('calendarModal').addEventListener('click', (e) => {
-                if (e.target.id === 'calendarModal') closeCalendarModal();
-            });
-
-            // ESC key to close modals
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    const configModal = document.getElementById('configModal');
-                    const calendarModal = document.getElementById('calendarModal');
-
-                    if (configModal.classList.contains('active')) {
-                        closeModal();
-                    } else if (calendarModal.classList.contains('active')) {
-                        closeCalendarModal();
-                    }
-                }
-            });
-
-            await loadEpisodes();
-            await loadLatestEpisode();
-            await checkAndRegenerateMissingSummaries();
+          }
         });
 
-        // API Functions
-        async function loadConfig() {
-            try {
-                const response = await fetch('/api/config');
-                const data = await response.json();
-                if (data.success) {
-                    const config = data.data;
+        await loadEpisodes();
+        await loadLatestEpisode();
+        await checkAndRegenerateMissingSummaries();
+      });
 
-                    // Auto Update Interval (read-only, always from env)
-                    const autoUpdateContainer = document.getElementById('autoUpdateContainer');
-                    const intervalText = config.auto_update_interval > 0
-                        ? t('configMinutes', { minutes: config.auto_update_interval })
-                        : t('configDisabled');
-                    autoUpdateContainer.innerHTML = `
+      // API Functions
+      async function loadConfig() {
+        try {
+          const response = await fetch("/api/config");
+          const data = await response.json();
+          if (data.success) {
+            const config = data.data;
+
+            // Auto Update Interval (read-only, always from env)
+            const autoUpdateContainer = document.getElementById(
+              "autoUpdateContainer",
+            );
+            const intervalText =
+              config.auto_update_interval > 0
+                ? t("configMinutes", { minutes: config.auto_update_interval })
+                : t("configDisabled");
+            autoUpdateContainer.innerHTML = `
                         <div class="env-badge">
                             <span>${intervalText}</span>
                         </div>
                     `;
 
-                    // API Base URL (read-only)
-                    const apiBaseUrlContainer = document.getElementById('apiBaseUrlContainer');
-                    apiBaseUrlContainer.innerHTML = `
+            // API Base URL (read-only)
+            const apiBaseUrlContainer = document.getElementById(
+              "apiBaseUrlContainer",
+            );
+            apiBaseUrlContainer.innerHTML = `
                         <div class="env-badge">
-                            ${config.api_base_url_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
-                            <span>${config.api_base_url || 'default'}</span>
+                            ${config.api_base_url_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ""}
+                            <span>${config.api_base_url || "default"}</span>
                         </div>
                     `;
 
-                    // Model (read-only)
-                    const modelContainer = document.getElementById('modelContainer');
-                    modelContainer.innerHTML = `
+            // Model (read-only)
+            const modelContainer = document.getElementById("modelContainer");
+            modelContainer.innerHTML = `
                         <div class="env-badge">
-                            ${config.model_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                            ${config.model_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ""}
                             <span>${config.model}</span>
                         </div>
                     `;
 
-                    // API Key (read-only, masked for security)
-                    const apiKeyContainer = document.getElementById('apiKeyContainer');
-                    apiKeyContainer.innerHTML = `
+            // API Key (read-only, masked for security)
+            const apiKeyContainer = document.getElementById("apiKeyContainer");
+            apiKeyContainer.innerHTML = `
                         <div class="env-badge">
-                            ${config.api_key_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                            ${config.api_key_from_env ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : ""}
                             <span>${config.masked_api_key}</span>
                         </div>
                     `;
 
-                    // SOCKS5 Proxy (read-only, always from env)
-                    const socks5Container = document.getElementById('socks5Container');
-                    socks5Container.innerHTML = `
+            // SOCKS5 Proxy (read-only, always from env)
+            const socks5Container = document.getElementById("socks5Container");
+            socks5Container.innerHTML = `
                         <div class="env-badge">
-                            <span>${config.socks5_proxy || t('configDisabled')}</span>
+                            <span>${config.socks5_proxy || t("configDisabled")}</span>
                         </div>
                     `;
 
-                    // Search Keywords (read-only, always from env)
-                    const searchKeywordsContainer = document.getElementById('searchKeywordsContainer');
-                    searchKeywordsContainer.innerHTML = `
+            // Search Keywords (read-only, always from env)
+            const searchKeywordsContainer = document.getElementById(
+              "searchKeywordsContainer",
+            );
+            searchKeywordsContainer.innerHTML = `
                         <div class="env-badge">
-                            <span>${config.search_keywords || t('configDisabled')}</span>
+                            <span>${config.search_keywords || t("configDisabled")}</span>
                         </div>
                     `;
-                }
-            } catch (error) {
-                console.error('Failed to load config:', error);
-            }
+          }
+        } catch (error) {
+          console.error("Failed to load config:", error);
         }
+      }
 
-        async function fetchStories() {
-            const btn = document.getElementById('refreshBtn');
-            btn.classList.add('loading');
+      async function fetchStories() {
+        const btn = document.getElementById("refreshBtn");
+        btn.classList.add("loading");
 
-            // Use SSE for streaming updates
-            const eventSource = new EventSource('/api/fetch/stream?lang=' + currentLang);
-            let storiesCount = 0;
-            let hasError = false;
+        // Use SSE for streaming updates
+        const eventSource = new EventSource(
+          "/api/fetch/stream?lang=" + currentLang,
+        );
+        let storiesCount = 0;
+        let hasError = false;
 
-            showToast(t('fetching'), 'loading', 3000);
+        showToast(t("fetching"), "loading", 3000);
 
-            eventSource.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
 
-                    switch (data.type) {
-                        case 'story_added':
-                            // Add story to list immediately with placeholder
-                            addStoryToList(data.story);
-                            break;
+            switch (data.type) {
+              case "story_added":
+                // Add story to list immediately with placeholder
+                addStoryToList(data.story);
+                break;
 
-                        case 'summary_done':
-                            // Update the story's summary
-                            updateStorySummary(data.hn_id, data.summary, data.summary_zh);
-                            storiesCount++;
-                            break;
+              case "summary_done":
+                // Update the story's summary
+                updateStorySummary(data.hn_id, data.summary, data.summary_zh);
+                storiesCount++;
+                break;
 
-                        case 'summary_error':
-                            // Show error for this story
-                            updateStorySummary(data.hn_id, null, null, data.error);
-                            break;
+              case "summary_error":
+                // Show error for this story
+                updateStorySummary(data.hn_id, null, null, data.error);
+                break;
 
-                        case 'done':
-                            hideToast();
-                            if (storiesCount > 0) {
-                                showToast(t('fetchedSuccess', { count: storiesCount, date: selectedDate || '' }), 'success');
-                            } else if (hasError) {
-                                showToast(t('fetchError'), 'error');
-                            }
-                            eventSource.close();
-                            btn.classList.remove('loading');
-                            updateRefreshButtonState();
-                            // Refresh episodes list
-                            loadEpisodes();
-                            break;
-                    }
-                } catch (e) {
-                    console.error('Failed to parse SSE event:', e);
-                }
-            };
-
-            eventSource.onerror = (error) => {
-                console.error('SSE error:', error);
+              case "done":
                 hideToast();
-                showToast('Connection error', 'error');
+                if (storiesCount > 0) {
+                  showToast(
+                    t("fetchedSuccess", {
+                      count: storiesCount,
+                      date: selectedDate || "",
+                    }),
+                    "success",
+                  );
+                } else if (hasError) {
+                  showToast(t("fetchError"), "error");
+                }
                 eventSource.close();
-                btn.classList.remove('loading');
+                btn.classList.remove("loading");
                 updateRefreshButtonState();
-                hasError = true;
-            };
+                // Refresh episodes list
+                loadEpisodes();
+                break;
+            }
+          } catch (e) {
+            console.error("Failed to parse SSE event:", e);
+          }
+        };
+
+        eventSource.onerror = (error) => {
+          console.error("SSE error:", error);
+          hideToast();
+          showToast("Connection error", "error");
+          eventSource.close();
+          btn.classList.remove("loading");
+          updateRefreshButtonState();
+          hasError = true;
+        };
+      }
+
+      // Add a story to the list with placeholder for summary
+      function addStoryToList(story) {
+        const container = document.getElementById("storiesContainer");
+
+        // Initialize currentStories if not set
+        if (!window.currentStories) {
+          window.currentStories = [];
         }
 
-        // Add a story to the list with placeholder for summary
-        function addStoryToList(story) {
-            const container = document.getElementById('storiesContainer');
-
-            // Initialize currentStories if not set
-            if (!window.currentStories) {
-                window.currentStories = [];
-            }
-
-            // Check if story already exists in the list
-            const existingIndex = window.currentStories.findIndex(s => s.hn_id === story.hn_id);
-            if (existingIndex >= 0) {
-                // Update existing story
-                window.currentStories[existingIndex] = story;
-            } else {
-                // Add new story
-                window.currentStories.push(story);
-            }
-
-            // Re-render the stories list
-            refreshStoriesListWithPlaceholders();
+        // Check if story already exists in the list
+        const existingIndex = window.currentStories.findIndex(
+          (s) => s.hn_id === story.hn_id,
+        );
+        if (existingIndex >= 0) {
+          // Update existing story
+          window.currentStories[existingIndex] = story;
+        } else {
+          // Add new story
+          window.currentStories.push(story);
         }
 
-        // Refresh stories list with placeholders for pending summaries
-        function refreshStoriesListWithPlaceholders() {
-            const container = document.getElementById('storiesContainer');
-            const stories = window.currentStories || [];
-            if (stories.length === 0) return;
+        // Re-render the stories list
+        refreshStoriesListWithPlaceholders();
+      }
 
-            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
-            const clickedHnIds = new Set(clickedStories);
+      // Refresh stories list with placeholders for pending summaries
+      function refreshStoriesListWithPlaceholders() {
+        const container = document.getElementById("storiesContainer");
+        const stories = window.currentStories || [];
+        if (stories.length === 0) return;
 
-            // Sort stories: unclicked first, clicked at the end
-            const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
-            const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
+        const clickedStories = JSON.parse(
+          localStorage.getItem("clickedStories") || "[]",
+        );
+        const clickedHnIds = new Set(clickedStories);
 
-            // Filter based on showOnlyRead state
-            let displayStories;
-            if (showOnlyRead) {
-                // Only show unread (unclicked) stories
-                displayStories = unclickedStories;
-            } else {
-                // Show all stories with unclicked first
-                displayStories = [...unclickedStories, ...clickedStoriesList];
-            }
+        // Sort stories: unclicked first, clicked at the end
+        const unclickedStories = stories.filter(
+          (s) => !clickedHnIds.has(s.hn_id),
+        );
+        const clickedStoriesList = stories.filter((s) =>
+          clickedHnIds.has(s.hn_id),
+        );
 
-            container.innerHTML = displayStories.map((s, i) => {
-                const isClicked = clickedHnIds.has(s.hn_id);
-                const clickedClass = isClicked ? 'clicked' : '';
-                const hasSummary = (currentLang === 'en' && s.summary) || (currentLang === 'zh' && s.summary_zh);
-                const placeholderClass = !hasSummary ? 'summary-placeholder' : '';
-                const placeholderText = !hasSummary ? (currentLang === 'zh' ? '生成摘要中...' : 'Generating summary...') : '';
+        // Filter based on showOnlyRead state
+        let displayStories;
+        if (showOnlyRead) {
+          // Only show unread (unclicked) stories
+          displayStories = unclickedStories;
+        } else {
+          // Show all stories with unclicked first
+          displayStories = [...unclickedStories, ...clickedStoriesList];
+        }
 
-                return `
+        container.innerHTML = displayStories
+          .map((s, i) => {
+            const isClicked = clickedHnIds.has(s.hn_id);
+            const clickedClass = isClicked ? "clicked" : "";
+            const hasSummary =
+              (currentLang === "en" && s.summary) ||
+              (currentLang === "zh" && s.summary_zh);
+            const placeholderClass = !hasSummary ? "summary-placeholder" : "";
+            const placeholderText = !hasSummary
+              ? currentLang === "zh"
+                ? "生成摘要中..."
+                : "Generating summary..."
+              : "";
+
+            return `
                 <div class="story ${clickedClass} ${placeholderClass}" data-hn-id="${s.hn_id}">
                     <div class="story-title">
-                        <a href="${escapeHtml(s.url || '#')}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
+                        <a href="${escapeHtml(s.url || "#")}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
                         <div class="story-actions">
-                            <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
+                            <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t("markRead")}" ${isClicked ? "disabled" : ""}>
                                 ${isClicked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'}
                             </button>
-                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}" ${!hasSummary ? 'disabled' : ''}>
+                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t("regenerateSummary")}" ${!hasSummary ? "disabled" : ""}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M21 12a9 9 0 11-2.636-6.364"/>
                                     <path d="M21 3v6h-6"/>
@@ -1406,183 +1634,196 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
-                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
+                        ${t("pointsBy", { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== "top" ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ""} |
+                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t("discuss")}</a>
                     </div>
-                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
-                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ''}
-                    ${!hasSummary ? `<div class="story-summary placeholder">${placeholderText}</div>` : ''}
+                    ${currentLang === "en" && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ""}
+                    ${currentLang === "zh" && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ""}
+                    ${!hasSummary ? `<div class="story-summary placeholder">${placeholderText}</div>` : ""}
                 </div>
-            `}).join('');
-        }
+            `;
+          })
+          .join("");
+      }
 
-        // Update a story's summary after it's generated
-        function updateStorySummary(hnId, summary, summaryZh, error = null) {
-            const stories = window.currentStories || [];
-            const storyIndex = stories.findIndex(s => s.hn_id === hnId);
+      // Update a story's summary after it's generated
+      function updateStorySummary(hnId, summary, summaryZh, error = null) {
+        const stories = window.currentStories || [];
+        const storyIndex = stories.findIndex((s) => s.hn_id === hnId);
 
-            if (storyIndex >= 0) {
-                if (error) {
-                    // Set error message as summary
-                    if (currentLang === 'zh') {
-                        stories[storyIndex].summary_zh = '生成摘要失败: ' + error;
-                    } else {
-                        stories[storyIndex].summary = 'Failed to generate summary: ' + error;
-                    }
-                } else {
-                    stories[storyIndex].summary = summary;
-                    stories[storyIndex].summary_zh = summaryZh;
-                }
-                window.currentStories = stories;
-                refreshStoriesListWithPlaceholders();
+        if (storyIndex >= 0) {
+          if (error) {
+            // Set error message as summary
+            if (currentLang === "zh") {
+              stories[storyIndex].summary_zh = "生成摘要失败: " + error;
+            } else {
+              stories[storyIndex].summary =
+                "Failed to generate summary: " + error;
             }
+          } else {
+            stories[storyIndex].summary = summary;
+            stories[storyIndex].summary_zh = summaryZh;
+          }
+          window.currentStories = stories;
+          refreshStoriesListWithPlaceholders();
         }
+      }
 
-        async function loadEpisodes() {
-            try {
-                const response = await fetch('/api/episodes');
-                const data = await response.json();
-                if (data.success) {
-                    episodesWithDates = new Set(data.data.map(ep => ep.date));
-                    renderCalendar();
-                }
-            } catch (error) {
-                console.error('Failed to load episodes:', error);
-            }
+      async function loadEpisodes() {
+        try {
+          const response = await fetch("/api/episodes");
+          const data = await response.json();
+          if (data.success) {
+            episodesWithDates = new Set(data.data.map((ep) => ep.date));
+            renderCalendar();
+          }
+        } catch (error) {
+          console.error("Failed to load episodes:", error);
         }
+      }
 
-        async function loadLatestEpisode() {
-            const container = document.getElementById('storiesContainer');
+      async function loadLatestEpisode() {
+        const container = document.getElementById("storiesContainer");
 
-            try {
-                const response = await fetch('/api/episode/latest');
-                const data = await response.json();
-                if (data.success) {
-                    renderEpisode(data.data);
-                } else {
-                    container.innerHTML = `
+        try {
+          const response = await fetch("/api/episode/latest");
+          const data = await response.json();
+          if (data.success) {
+            renderEpisode(data.data);
+          } else {
+            container.innerHTML = `
                         <div class="empty-state">
                             <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                 <path d="M4 4h16v16H4z"/>
                                 <path d="M9 9h6M9 12h6M9 15h4"/>
                             </svg>
-                            <p>${t('emptyNoEpisodes')}</p>
-                            <p style="font-size: 13px; margin-top: 8px;">${t('emptyCreateHint')}</p>
+                            <p>${t("emptyNoEpisodes")}</p>
+                            <p style="font-size: 13px; margin-top: 8px;">${t("emptyCreateHint")}</p>
                         </div>
                     `;
-                }
-            } catch (error) {
-                container.innerHTML = `
+          }
+        } catch (error) {
+          container.innerHTML = `
                     <div class="empty-state">
                         <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                             <line x1="12" y1="9" x2="12" y2="13"/>
                             <line x1="12" y1="17" x2="12.01" y2="17"/>
                         </svg>
-                        <p>${t('emptyError')}</p>
+                        <p>${t("emptyError")}</p>
                         <p style="font-size: 13px; margin-top: 8px;">${escapeHtml(error.message)}</p>
                     </div>
                 `;
-            }
         }
+      }
 
-        async function loadEpisode(date) {
-            const container = document.getElementById('storiesContainer');
-            container.innerHTML = '<div class="empty-state"><div class="loading-spinner"></div><p>Loading...</p></div>';
+      async function loadEpisode(date) {
+        const container = document.getElementById("storiesContainer");
+        container.innerHTML =
+          '<div class="empty-state"><div class="loading-spinner"></div><p>Loading...</p></div>';
 
-            try {
-                const response = await fetch(`/api/episode/${date}`);
-                const data = await response.json();
-                if (data.success) {
-                    renderEpisode(data.data);
-                } else {
-                    container.innerHTML = `
+        try {
+          const response = await fetch(`/api/episode/${date}`);
+          const data = await response.json();
+          if (data.success) {
+            renderEpisode(data.data);
+          } else {
+            container.innerHTML = `
                         <div class="empty-state">
                             <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                 <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                             </svg>
-                            <p>${t('emptyNotFound')}</p>
+                            <p>${t("emptyNotFound")}</p>
                         </div>
                     `;
-                }
-            } catch (error) {
-                container.innerHTML = `
+          }
+        } catch (error) {
+          container.innerHTML = `
                     <div class="empty-state">
                         <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                             <line x1="12" y1="9" x2="12" y2="13"/>
                             <line x1="12" y1="17" x2="12.01" y2="17"/>
                         </svg>
-                        <p>${t('emptyError')}</p>
+                        <p>${t("emptyError")}</p>
                     </div>
                 `;
-            }
         }
+      }
 
-        function renderEpisode(episodeData) {
-            const container = document.getElementById('storiesContainer');
-            const episode = episodeData.episode;
-            let stories = episodeData.stories;
+      function renderEpisode(episodeData) {
+        const container = document.getElementById("storiesContainer");
+        const episode = episodeData.episode;
+        let stories = episodeData.stories || []; // Ensure it's always an array
 
-            selectedDate = episode.date;
-            updateRefreshButtonState();
+        selectedDate = episode.date;
+        updateRefreshButtonState();
 
-            // Deduplicate stories by hn_id (keep first occurrence, highest score)
-            const seenHnIds = new Set();
-            stories = stories.filter(s => {
-                if (seenHnIds.has(s.hn_id)) {
-                    return false;
-                }
-                seenHnIds.add(s.hn_id);
-                return true;
-            });
+        // Deduplicate stories: use hn_id for valid IDs, URL for hn_id=0 cases
+        const seenKeys = new Set();
+        stories = stories.filter((s) => {
+          const key =
+            s.hn_id !== 0 ? `hn:${s.hn_id}` : `url:${s.url || s.title}`;
+          if (seenKeys.has(key)) {
+            return false;
+          }
+          seenKeys.add(key);
+          return true;
+        });
 
-            // Store stories for refresh without API call
-            window.currentStories = stories;
-            window.currentEpisode = episode;
+        // Always set window.currentStories, even if empty
+        window.currentStories = stories;
+        window.currentEpisode = episode;
 
-            if (!stories || stories.length === 0) {
-                container.innerHTML = `
+        if (!stories || stories.length === 0) {
+          container.innerHTML = `
                     <div class="empty-state">
                         <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                         </svg>
-                        <p>${t('emptyNoStories')}</p>
+                        <p>${t("emptyNoStories")}</p>
                     </div>
                 `;
-                return;
-            }
+          return;
+        }
 
-            // Get clicked stories from localStorage
-            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
-            const clickedHnIds = new Set(clickedStories);
+        // Get clicked stories from localStorage
+        const clickedStories = JSON.parse(
+          localStorage.getItem("clickedStories") || "[]",
+        );
+        const clickedHnIds = new Set(clickedStories);
 
-            // Sort stories: unclicked first, clicked at the end
-            const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
-            const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
+        // Sort stories: unclicked first, clicked at the end
+        const unclickedStories = stories.filter(
+          (s) => !clickedHnIds.has(s.hn_id),
+        );
+        const clickedStoriesList = stories.filter((s) =>
+          clickedHnIds.has(s.hn_id),
+        );
 
-            // Filter based on showOnlyRead state
-            let displayStories;
-            if (showOnlyRead) {
-                // Only show unread (unclicked) stories
-                displayStories = unclickedStories;
-            } else {
-                // Show all stories with unclicked first
-                displayStories = [...unclickedStories, ...clickedStoriesList];
-            }
+        // Filter based on showOnlyRead state
+        let displayStories;
+        if (showOnlyRead) {
+          // Only show unread (unclicked) stories
+          displayStories = unclickedStories;
+        } else {
+          // Show all stories with unclicked first
+          displayStories = [...unclickedStories, ...clickedStoriesList];
+        }
 
-            container.innerHTML = displayStories.map((s, i) => {
-                const isClicked = clickedHnIds.has(s.hn_id);
-                const clickedClass = isClicked ? 'clicked' : '';
-                return `
+        container.innerHTML = displayStories
+          .map((s, i) => {
+            const isClicked = clickedHnIds.has(s.hn_id);
+            const clickedClass = isClicked ? "clicked" : "";
+            return `
                 <div class="story ${clickedClass}" data-hn-id="${s.hn_id}">
                     <div class="story-title">
-                        <a href="${escapeHtml(s.url || '#')}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
+                        <a href="${escapeHtml(s.url || "#")}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
                         <div class="story-actions">
-                            <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
+                            <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t("markRead")}" ${isClicked ? "disabled" : ""}>
                                 ${isClicked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'}
                             </button>
-                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}">
+                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t("regenerateSummary")}">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M21 12a9 9 0 11-2.636-6.364"/>
                                     <path d="M21 3v6h-6"/>
@@ -1591,61 +1832,75 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
-                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
+                        ${t("pointsBy", { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== "top" ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ""} |
+                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t("discuss")}</a>
                     </div>
-                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
-                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ''}
+                    ${currentLang === "en" && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ""}
+                    ${currentLang === "zh" && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ""}
                 </div>
-            `}).join('');
+            `;
+          })
+          .join("");
+      }
+
+      // Mark story as clicked and store in localStorage, then refresh list
+      function markStoryClicked(hnId) {
+        const clickedStories = JSON.parse(
+          localStorage.getItem("clickedStories") || "[]",
+        );
+        if (!clickedStories.includes(hnId)) {
+          clickedStories.push(hnId);
+          localStorage.setItem(
+            "clickedStories",
+            JSON.stringify(clickedStories),
+          );
+          // Refresh the list to reorder stories (not reload page)
+          refreshStoriesList();
+        }
+      }
+
+      // Refresh the current stories list without fetching from API
+      function refreshStoriesList() {
+        const container = document.getElementById("storiesContainer");
+        const stories = window.currentStories || [];
+        if (stories.length === 0) return;
+
+        const clickedStories = JSON.parse(
+          localStorage.getItem("clickedStories") || "[]",
+        );
+        const clickedHnIds = new Set(clickedStories);
+
+        // Sort stories: unclicked first, clicked at the end
+        const unclickedStories = stories.filter(
+          (s) => !clickedHnIds.has(s.hn_id),
+        );
+        const clickedStoriesList = stories.filter((s) =>
+          clickedHnIds.has(s.hn_id),
+        );
+
+        // Filter based on showOnlyRead state
+        let displayStories;
+        if (showOnlyRead) {
+          // Only show unread (unclicked) stories
+          displayStories = unclickedStories;
+        } else {
+          // Show all stories with unclicked first
+          displayStories = [...unclickedStories, ...clickedStoriesList];
         }
 
-        // Mark story as clicked and store in localStorage, then refresh list
-        function markStoryClicked(hnId) {
-            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
-            if (!clickedStories.includes(hnId)) {
-                clickedStories.push(hnId);
-                localStorage.setItem('clickedStories', JSON.stringify(clickedStories));
-                // Refresh the list to reorder stories (not reload page)
-                refreshStoriesList();
-            }
-        }
-
-        // Refresh the current stories list without fetching from API
-        function refreshStoriesList() {
-            const container = document.getElementById('storiesContainer');
-            const stories = window.currentStories || [];
-            if (stories.length === 0) return;
-
-            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
-            const clickedHnIds = new Set(clickedStories);
-
-            // Sort stories: unclicked first, clicked at the end
-            const unclickedStories = stories.filter(s => !clickedHnIds.has(s.hn_id));
-            const clickedStoriesList = stories.filter(s => clickedHnIds.has(s.hn_id));
-
-            // Filter based on showOnlyRead state
-            let displayStories;
-            if (showOnlyRead) {
-                // Only show unread (unclicked) stories
-                displayStories = unclickedStories;
-            } else {
-                // Show all stories with unclicked first
-                displayStories = [...unclickedStories, ...clickedStoriesList];
-            }
-
-            container.innerHTML = displayStories.map((s, i) => {
-                const isClicked = clickedHnIds.has(s.hn_id);
-                const clickedClass = isClicked ? 'clicked' : '';
-                return `
+        container.innerHTML = displayStories
+          .map((s, i) => {
+            const isClicked = clickedHnIds.has(s.hn_id);
+            const clickedClass = isClicked ? "clicked" : "";
+            return `
                 <div class="story ${clickedClass}" data-hn-id="${s.hn_id}">
                     <div class="story-title">
-                        <a href="${escapeHtml(s.url || '#')}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
+                        <a href="${escapeHtml(s.url || "#")}" target="_blank" onclick="markStoryClicked(${s.hn_id})">${i + 1}. ${escapeHtml(s.title)}</a>
                         <div class="story-actions">
-                            <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t('markRead')}" ${isClicked ? 'disabled' : ''}>
+                            <button class="mark-read-btn" onclick="markSingleStoryRead(${s.hn_id})" title="${t("markRead")}" ${isClicked ? "disabled" : ""}>
                                 ${isClicked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'}
                             </button>
-                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t('regenerateSummary')}">
+                            <button class="regenerate-btn" id="regenerate-${s.hn_id}" onclick="regenerateSummary(${s.hn_id})" title="${t("regenerateSummary")}">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M21 12a9 9 0 11-2.636-6.364"/>
                                     <path d="M21 3v6h-6"/>
@@ -1654,277 +1909,338 @@
                         </div>
                     </div>
                     <div class="story-meta">
-                        ${t('pointsBy', { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== 'top' ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ''} |
-                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t('discuss')}</a>
+                        ${t("pointsBy", { score: s.score, author: escapeHtml(s.by) })}${s.tag && s.tag !== "top" ? ` | <span class="story-tag">${escapeHtml(s.tag)}</span>` : ""} |
+                        <a href="https://news.ycombinator.com/item?id=${s.hn_id}" target="_blank">${t("discuss")}</a>
                     </div>
-                    ${currentLang === 'en' && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ''}
-                    ${currentLang === 'zh' && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ''}
+                    ${currentLang === "en" && s.summary ? `<div class="story-summary">${renderMarkdown(s.summary)}</div>` : ""}
+                    ${currentLang === "zh" && s.summary_zh ? `<div class="story-summary">${renderMarkdown(s.summary_zh)}</div>` : ""}
                 </div>
-            `}).join('');
+            `;
+          })
+          .join("");
+      }
+
+      // Mark a single story as read without opening the link
+      function markSingleStoryRead(hnId) {
+        const clickedStories = JSON.parse(
+          localStorage.getItem("clickedStories") || "[]",
+        );
+        if (!clickedStories.includes(hnId)) {
+          clickedStories.push(hnId);
+          localStorage.setItem(
+            "clickedStories",
+            JSON.stringify(clickedStories),
+          );
+          refreshStoriesList();
+        }
+      }
+
+      // Remove all read stories from clicked list AND from database for current episode
+      async function removeAllReadStories() {
+        if (!confirm(t("confirmRemoveRead"))) return;
+
+        // Get clicked (read) hn_ids from localStorage
+        const clickedStories = JSON.parse(
+          localStorage.getItem("clickedStories") || "[]",
+        );
+        if (clickedStories.length === 0) {
+          showToast(t("removed", { count: 0 }), "success");
+          closeModal();
+          return;
         }
 
-        // Mark a single story as read without opening the link
-        function markSingleStoryRead(hnId) {
-            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
-            if (!clickedStories.includes(hnId)) {
-                clickedStories.push(hnId);
-                localStorage.setItem('clickedStories', JSON.stringify(clickedStories));
-                refreshStoriesList();
-            }
+        try {
+          // Delete read stories from database
+          const response = await fetch("/api/stories/read", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ hn_ids: clickedStories }),
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            // Clear clicked stories from localStorage
+            localStorage.setItem("clickedStories", "[]");
+
+            // Close modal
+            closeModal();
+
+            // Refresh the list and episodes
+            await loadEpisodes();
+            await loadLatestEpisode();
+            showToast(
+              t("removed", { count: data.data.deleted_count }),
+              "success",
+            );
+          } else {
+            showToast(data.error || "Failed to remove read stories", "error");
+          }
+        } catch (error) {
+          showToast("Error: " + error.message, "error");
         }
+      }
 
-        // Remove all read stories from clicked list AND from database for current episode
-        async function removeAllReadStories() {
-            if (!confirm(t('confirmRemoveRead'))) return;
+      // Remove all stories from database
+      async function removeAllStories() {
+        if (!confirm(t("confirmRemoveAll"))) return;
 
-            // Get clicked (read) hn_ids from localStorage
-            const clickedStories = JSON.parse(localStorage.getItem('clickedStories') || '[]');
-            if (clickedStories.length === 0) {
-                showToast(t('removed', { count: 0 }), 'success');
-                closeModal();
-                return;
-            }
-
-            try {
-                // Delete read stories from database
-                const response = await fetch('/api/stories/read', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ hn_ids: clickedStories })
-                });
-                const data = await response.json();
-
-                if (data.success) {
-                    // Clear clicked stories from localStorage
-                    localStorage.setItem('clickedStories', '[]');
-
-                    // Close modal
-                    closeModal();
-
-                    // Refresh the list and episodes
-                    await loadEpisodes();
-                    await loadLatestEpisode();
-                    showToast(t('removed', { count: data.data.deleted_count }), 'success');
-                } else {
-                    showToast(data.error || 'Failed to remove read stories', 'error');
-                }
-            } catch (error) {
-                showToast('Error: ' + error.message, 'error');
-            }
+        try {
+          const response = await fetch("/api/stories", { method: "DELETE" });
+          const data = await response.json();
+          if (data.success) {
+            // Clear clicked stories from localStorage
+            localStorage.setItem("clickedStories", "[]");
+            // Refresh the list and episodes
+            await loadEpisodes();
+            await loadLatestEpisode();
+            closeModal();
+            showToast(
+              t("removed", { count: data.data.deleted_count }),
+              "success",
+            );
+          } else {
+            showToast(data.error || "Failed to remove stories", "error");
+          }
+        } catch (error) {
+          showToast("Error: " + error.message, "error");
         }
+      }
 
-        // Remove all stories from database
-        async function removeAllStories() {
-            if (!confirm(t('confirmRemoveAll'))) return;
+      // Regenerate summary for a story
+      async function regenerateSummary(hnId) {
+        const btn = document.getElementById(`regenerate-${hnId}`);
+        if (btn) btn.disabled = true;
+        showToast(t("regeneratingSummary"), "loading", 3000);
 
-            try {
-                const response = await fetch('/api/stories', { method: 'DELETE' });
-                const data = await response.json();
-                if (data.success) {
-                    // Clear clicked stories from localStorage
-                    localStorage.setItem('clickedStories', '[]');
-                    // Refresh the list and episodes
-                    await loadEpisodes();
-                    await loadLatestEpisode();
-                    closeModal();
-                    showToast(t('removed', { count: data.data.deleted_count }), 'success');
-                } else {
-                    showToast(data.error || 'Failed to remove stories', 'error');
-                }
-            } catch (error) {
-                showToast('Error: ' + error.message, 'error');
-            }
-        }
-
-        // Regenerate summary for a story
-        async function regenerateSummary(hnId) {
-            const btn = document.getElementById(`regenerate-${hnId}`);
-            if (btn) btn.disabled = true;
-            showToast(t('regeneratingSummary'), 'loading', 3000);
-
-            try {
-                const response = await fetch(`/api/story/${hnId}/regenerate`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lang: currentLang })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    showToast(t('summaryRegenerated'), 'success');
-                    // Update the story in currentStories
-                    const stories = window.currentStories || [];
-                    const updatedStory = data.data.story;
-                    for (let i = 0; i < stories.length; i++) {
-                        if (stories[i].hn_id === updatedStory.hn_id) {
-                            stories[i] = updatedStory;
-                            break;
-                        }
-                    }
-                    window.currentStories = stories;
-                    refreshStoriesList();
-                } else {
-                    showToast(data.error || 'Failed to regenerate summary', 'error');
-                }
-            } catch (error) {
-                showToast('Error: ' + error.message, 'error');
-            } finally {
-                if (btn) btn.disabled = false;
-            }
-        }
-
-        // Internal regenerate function without toast notifications (used for auto-regeneration)
-        async function regenerateSummaryInternal(hnId) {
-            const btn = document.getElementById(`regenerate-${hnId}`);
-            if (btn) btn.disabled = true;
-
-            try {
-                const response = await fetch(`/api/story/${hnId}/regenerate`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lang: currentLang })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    // Update the story in currentStories
-                    const stories = window.currentStories || [];
-                    const updatedStory = data.data.story;
-                    for (let i = 0; i < stories.length; i++) {
-                        if (stories[i].hn_id === updatedStory.hn_id) {
-                            stories[i] = updatedStory;
-                            break;
-                        }
-                    }
-                    window.currentStories = stories;
-                    refreshStoriesListWithPlaceholders();
-                    return { success: true };
-                } else {
-                    updateStorySummary(hnId, null, null, data.error || 'Failed to regenerate');
-                    return { success: false, error: data.error };
-                }
-            } catch (error) {
-                updateStorySummary(hnId, null, null, error.message);
-                return { success: false, error: error.message };
-            } finally {
-                if (btn) btn.disabled = false;
-            }
-        }
-
-        // Check for missing summaries and regenerate them automatically
-        async function checkAndRegenerateMissingSummaries() {
+        try {
+          const response = await fetch(`/api/story/${hnId}/regenerate`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lang: currentLang }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            showToast(t("summaryRegenerated"), "success");
+            // Update the story in currentStories
             const stories = window.currentStories || [];
-            if (stories.length === 0) return;
-
-            // Filter stories missing summary based on current language
-            const missingStories = stories.filter(s => {
-                if (currentLang === 'zh') {
-                    return !s.summary_zh || s.summary_zh === '';
-                }
-                return !s.summary || s.summary === '';
-            });
-
-            if (missingStories.length === 0) return;
-
-            // Regenerate in batches of 3 (matching existing concurrency pattern)
-            const batchSize = 3;
-            for (let i = 0; i < missingStories.length; i += batchSize) {
-                const batch = missingStories.slice(i, i + batchSize);
-                await Promise.all(batch.map(s => regenerateSummaryInternal(s.hn_id)));
+            const updatedStory = data.data.story;
+            for (let i = 0; i < stories.length; i++) {
+              if (stories[i].hn_id === updatedStory.hn_id) {
+                stories[i] = updatedStory;
+                break;
+              }
             }
+            window.currentStories = stories;
+            refreshStoriesList();
+          } else {
+            showToast(data.error || "Failed to regenerate summary", "error");
+          }
+        } catch (error) {
+          showToast("Error: " + error.message, "error");
+        } finally {
+          if (btn) btn.disabled = false;
         }
+      }
 
-        // Calendar Functions
-        function renderCalendar() {
-            const grid = document.getElementById('calendarGrid');
-            const title = document.getElementById('calendarTitle');
+      // Internal regenerate function without toast notifications (used for auto-regeneration)
+      async function regenerateSummaryInternal(hnId) {
+        const btn = document.getElementById(`regenerate-${hnId}`);
+        if (btn) btn.disabled = true;
 
-            const year = currentMonth.getFullYear();
-            const month = currentMonth.getMonth();
-
-            title.textContent = currentMonth.toLocaleDateString(currentLang === 'zh' ? 'zh-CN' : 'en-US', { month: 'long', year: 'numeric' });
-
-            const dayHeaders = currentLang === 'zh' ? ['日', '一', '二', '三', '四', '五', '六'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-            let html = dayHeaders.map(d => `<div class="calendar-day-header">${d}</div>`).join('');
-
-            const firstDay = new Date(year, month, 1);
-            const lastDay = new Date(year, month + 1, 0);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            // Days from previous month
-            const startDayOfWeek = firstDay.getDay();
-            const prevMonthLastDay = new Date(year, month, 0).getDate();
-            for (let i = startDayOfWeek - 1; i >= 0; i--) {
-                html += `<div class="calendar-day other-month empty">${prevMonthLastDay - i}</div>`;
+        try {
+          const response = await fetch(`/api/story/${hnId}/regenerate`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lang: currentLang }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            // Update the story in currentStories
+            const stories = window.currentStories || [];
+            const updatedStory = data.data.story;
+            for (let i = 0; i < stories.length; i++) {
+              if (stories[i].hn_id === updatedStory.hn_id) {
+                stories[i] = updatedStory;
+                break;
+              }
             }
+            window.currentStories = stories;
+            refreshStoriesListWithPlaceholders();
+            return { success: true };
+          } else {
+            updateStorySummary(
+              hnId,
+              null,
+              null,
+              data.error || "Failed to regenerate",
+            );
+            return { success: false, error: data.error };
+          }
+        } catch (error) {
+          updateStorySummary(hnId, null, null, error.message);
+          return { success: false, error: error.message };
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
 
-            // Days of current month
-            for (let day = 1; day <= lastDay.getDate(); day++) {
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const dayDate = new Date(year, month, day);
+      // Check for missing summaries and regenerate them automatically (both languages)
+      async function checkAndRegenerateMissingSummaries() {
+        const stories = window.currentStories || [];
+        console.log(
+          "Checking for missing summaries, total stories:",
+          stories.length,
+        );
 
-                let classes = 'calendar-day';
-                if (dayDate.getTime() === today.getTime()) {
-                    classes += ' today';
-                }
-                if (episodesWithDates.has(dateStr)) {
-                    classes += ' has-data';
-                }
-                if (selectedDate === dateStr) {
-                    classes += ' selected';
-                }
+        if (stories.length === 0) return;
 
-                html += `<div class="${classes}" onclick="selectDate('${dateStr}')">${day}</div>`;
-            }
+        const clickedStories = JSON.parse(
+          localStorage.getItem("clickedStories") || "[]",
+        );
+        const clickedHnIds = new Set(clickedStories);
 
-            // Days from next month
-            const endDayOfWeek = lastDay.getDay();
-            for (let i = 1; i < 7 - endDayOfWeek; i++) {
-                html += `<div class="calendar-day other-month empty">${i}</div>`;
-            }
+        // Filter stories missing either English or Chinese summary
+        const missingStories = stories.filter((s) => {
+          const hasEnSummary =
+            currentLang === "en" ? s.summary && s.summary.trim() !== "" : true;
+          const hasZhSummary =
+            currentLang === "zh"
+              ? s.summary_zh && s.summary_zh.trim() !== ""
+              : true;
 
-            grid.innerHTML = html;
+          console.log(s.hn_id, clickedHnIds.has(s.hn_id));
+
+          return (!hasEnSummary || !hasZhSummary) && !clickedHnIds.has(s.hn_id);
+        });
+
+        // Count missing summaries for each language
+        const missingEn = stories.filter(
+          (s) => !s.summary || s.summary.trim() === "",
+        ).length;
+        const missingZh = stories.filter(
+          (s) => !s.summary_zh || s.summary_zh.trim() === "",
+        ).length;
+
+        console.log("Regenerated stories: ", missingStories.length);
+        if (missingStories.length === 0) return;
+
+        const toastMsg =
+          currentLang === "zh"
+            ? `正在重新生成 ${missingStories.length} 个缺失的中文摘要`
+            : `Regenerating ${missingStories.length} missing English summaries`;
+        showToast(toastMsg, "loading", 5000);
+
+        // Regenerate in batches of 3 (matching existing concurrency pattern)
+        const batchSize = 3;
+        for (let i = 0; i < missingStories.length; i += batchSize) {
+          const batch = missingStories.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map((s) => regenerateSummaryInternal(s.hn_id)),
+          );
+        }
+      }
+
+      // Calendar Functions
+      function renderCalendar() {
+        const grid = document.getElementById("calendarGrid");
+        const title = document.getElementById("calendarTitle");
+
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+
+        title.textContent = currentMonth.toLocaleDateString(
+          currentLang === "zh" ? "zh-CN" : "en-US",
+          { month: "long", year: "numeric" },
+        );
+
+        const dayHeaders =
+          currentLang === "zh"
+            ? ["日", "一", "二", "三", "四", "五", "六"]
+            : ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+        let html = dayHeaders
+          .map((d) => `<div class="calendar-day-header">${d}</div>`)
+          .join("");
+
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Days from previous month
+        const startDayOfWeek = firstDay.getDay();
+        const prevMonthLastDay = new Date(year, month, 0).getDate();
+        for (let i = startDayOfWeek - 1; i >= 0; i--) {
+          html += `<div class="calendar-day other-month empty">${prevMonthLastDay - i}</div>`;
         }
 
-        function changeMonth(delta) {
-            currentMonth.setMonth(currentMonth.getMonth() + delta);
-            renderCalendar();
+        // Days of current month
+        for (let day = 1; day <= lastDay.getDate(); day++) {
+          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const dayDate = new Date(year, month, day);
+
+          let classes = "calendar-day";
+          if (dayDate.getTime() === today.getTime()) {
+            classes += " today";
+          }
+          if (episodesWithDates.has(dateStr)) {
+            classes += " has-data";
+          }
+          if (selectedDate === dateStr) {
+            classes += " selected";
+          }
+
+          html += `<div class="${classes}" onclick="selectDate('${dateStr}')">${day}</div>`;
         }
 
-        function selectDate(dateStr) {
-            selectedDate = dateStr;
-            renderCalendar();
-            loadEpisode(dateStr);
-            closeCalendarModal();
-            updateRefreshButtonState();
+        // Days from next month
+        const endDayOfWeek = lastDay.getDay();
+        for (let i = 1; i < 7 - endDayOfWeek; i++) {
+          html += `<div class="calendar-day other-month empty">${i}</div>`;
         }
 
-        // Utility
-        function getTodayDateString() {
-            const today = new Date();
-            return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        }
+        grid.innerHTML = html;
+      }
 
-        function updateRefreshButtonState() {
-            const btn = document.getElementById('refreshBtn');
-            const today = getTodayDateString();
-            btn.disabled = (selectedDate && selectedDate !== today);
-        }
+      function changeMonth(delta) {
+        currentMonth.setMonth(currentMonth.getMonth() + delta);
+        renderCalendar();
+      }
 
-        function escapeHtml(text) {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+      function selectDate(dateStr) {
+        selectedDate = dateStr;
+        renderCalendar();
+        loadEpisode(dateStr);
+        closeCalendarModal();
+        updateRefreshButtonState();
+      }
 
-        function renderMarkdown(text) {
-            if (!text) return '';
-            marked.setOptions({
-                breaks: true,
-                gfm: true
-            });
-            return marked.parse(text);
-        }
+      // Utility
+      function getTodayDateString() {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      }
+
+      function updateRefreshButtonState() {
+        const btn = document.getElementById("refreshBtn");
+        const today = getTodayDateString();
+        btn.disabled = selectedDate && selectedDate !== today;
+      }
+
+      function escapeHtml(text) {
+        if (!text) return "";
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function renderMarkdown(text) {
+        if (!text) return "";
+        marked.setOptions({
+          breaks: true,
+          gfm: true,
+        });
+        return marked.parse(text);
+      }
     </script>
-</body>
+  </body>
 </html>

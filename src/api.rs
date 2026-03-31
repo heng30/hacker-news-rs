@@ -2,6 +2,10 @@ use super::fetcher::USER_AGENT;
 use crate::db::HnStory;
 use anyhow::Result;
 use serde::Deserialize;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 const HN_RSS_BASE: &str = "https://hnrss.org";
 const HN_API_BASE: &str = "https://hacker-news.firebaseio.com/v0";
@@ -133,7 +137,21 @@ fn extract_hn_id_from_entry(entry: &feed_rs::model::Entry) -> i64 {
     if entry.id.contains("news.ycombinator.com/item?id=")
         && let Some(id_str) = entry.id.split("id=").last()
     {
-        return id_str.parse().unwrap_or(0);
+        return id_str.parse().unwrap_or_else(|_| {
+            let id_str = entry
+                .title
+                .clone()
+                .map(|title| title.content)
+                .unwrap_or_else(|| {
+                    entry
+                        .links
+                        .first()
+                        .map(|link| link.href.clone())
+                        .unwrap_or_default()
+                });
+
+            calculate_hash(&id_str) as i64
+        });
     }
     0
 }
@@ -150,4 +168,10 @@ fn extract_score_from_entry(entry: &feed_rs::model::Entry) -> i64 {
         }
     }
     0
+}
+
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    t.hash(&mut hasher);
+    hasher.finish()
 }

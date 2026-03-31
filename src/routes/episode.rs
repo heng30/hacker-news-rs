@@ -549,12 +549,7 @@ async fn regenerate_story_summary(
                 get_llm_timeout(),
             );
 
-            tracing::info!(
-                "Regenerating {} summary for story {}: {}",
-                lang,
-                s.hn_id,
-                s.title
-            );
+            tracing::info!("Regenerating summaries for story {}: {}", s.hn_id, s.title);
             let (summary, summary_zh) = llm_client
                 .summarize(&s.title, s.url.as_deref(), lang)
                 .await
@@ -567,13 +562,8 @@ async fn regenerate_story_summary(
                     )
                 })?;
 
-            if lang == "en" {
-                db::update_story_summary_by_lang(
-                    &state.pool,
-                    s.id,
-                    lang,
-                    &summary.unwrap_or_default(),
-                )
+            // Update both English and Chinese summaries
+            db::update_story_summary(&state.pool, s.id, summary.as_deref(), summary_zh.as_deref())
                 .await
                 .map_err(|e| {
                     (
@@ -581,21 +571,6 @@ async fn regenerate_story_summary(
                         Json(ApiResponse::error(&e.to_string())),
                     )
                 })?;
-            } else {
-                db::update_story_summary_by_lang(
-                    &state.pool,
-                    s.id,
-                    lang,
-                    &summary_zh.unwrap_or_default(),
-                )
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::error(&e.to_string())),
-                    )
-                })?;
-            }
 
             let updated_story = db::get_story_by_hn_id(&state.pool, hn_id)
                 .await
