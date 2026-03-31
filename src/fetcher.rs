@@ -42,7 +42,18 @@ pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
         }
     };
 
-    let markdown = match HtmlToMarkdown::new().convert(&html) {
+    let converter = HtmlToMarkdown::builder()
+        .skip_tags(vec![
+            "img", "video", "audio", "source", // Media elements
+            "script", "style", "noscript", // Script/style elements
+            "iframe", "embed", "object", // Embedded content
+            "canvas", "svg", // Graphics
+            "form", "input", "button", // Form elements
+            "nav", "footer", "aside", // Navigation/structural
+            "meta", "link", // Metadata
+        ])
+        .build();
+    let markdown = match converter.convert(&html) {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!("Failed to convert HTML to Markdown for {}: {}", url, e);
