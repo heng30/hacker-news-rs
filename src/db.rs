@@ -267,6 +267,7 @@ pub async fn update_story_summary(
 pub async fn delete_all_stories(pool: &SqlitePool) -> Result<usize> {
     let result = sqlx::query("DELETE FROM stories").execute(pool).await?;
     sqlx::query("DELETE FROM episodes").execute(pool).await?;
+    sqlx::query("DELETE FROM url_hashes").execute(pool).await?;
 
     Ok(result.rows_affected() as usize)
 }
