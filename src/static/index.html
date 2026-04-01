@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hacker News RSS Generator</title>
+    <title>Hacker News</title>
     <link
       rel="icon"
       type="image/svg+xml"
@@ -712,6 +712,63 @@
           .navbar h1 {
               display: none;
           }
+
+          .main-container {
+              padding: 10px;
+          }
+
+          .story {
+              padding: 12px 10px;
+          }
+
+          .story-title {
+              flex-wrap: wrap;
+              gap: 8px;
+          }
+
+          .story-meta {
+              font-size: 11px;
+          }
+
+          .story-summary {
+              font-size: 13px;
+          }
+
+          .modal {
+              max-width: 95vw;
+              margin: 10px;
+          }
+
+          .calendar-modal {
+              max-width: 95vw;
+          }
+
+          .navbar-left, .navbar-center, .navbar-right {
+              gap: 5px;
+          }
+      }
+
+      @media (max-width: 480px) {
+          .main-container {
+              padding: 8px;
+          }
+
+          .story {
+              padding: 10px 8px;
+          }
+
+          .story-title a {
+              font-size: 14px;
+          }
+
+          .icon-btn {
+              width: 24px;
+              height: 24px;
+          }
+
+          .navbar {
+              padding: 5px 8px;
+          }
       }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -733,7 +790,7 @@
             <path d="M4 4h16v16H4z" />
             <path d="M9 9h6M9 12h6M9 15h4" />
           </svg>
-          Hacker News RSS
+          Hacker News
         </h1>
       </div>
       <div class="navbar-right">
@@ -1137,6 +1194,8 @@
           discuss: "discuss",
           showAllStories: "Show all stories",
           showOnlyUnread: "Show only unread",
+          emptyNoUnread: "No unread items",
+          emptyNoUnreadHint: "All stories have been read",
         },
         zh: {
           emptyNoEpisode: "暂无内容",
@@ -1175,6 +1234,8 @@
           discuss: "评论",
           showAllStories: "显示全部条目",
           showOnlyUnread: "只显示未读",
+          emptyNoUnread: "没有未读条目",
+          emptyNoUnreadHint: "所有条目都已阅读",
         },
       };
 
@@ -1603,6 +1664,21 @@
           displayStories = [...unclickedStories, ...clickedStoriesList];
         }
 
+        // Check for empty unread list
+        if (showOnlyRead && displayStories.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <p>${t("emptyNoUnread")}</p>
+              <p style="font-size: 13px; margin-top: 8px;">${t("emptyNoUnreadHint")}</p>
+            </div>
+          `;
+          return;
+        }
+
         container.innerHTML = displayStories
           .map((s, i) => {
             const isClicked = clickedHnIds.has(s.hn_id);
@@ -1811,6 +1887,21 @@
           displayStories = [...unclickedStories, ...clickedStoriesList];
         }
 
+        // Check for empty unread list
+        if (showOnlyRead && displayStories.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <p>${t("emptyNoUnread")}</p>
+              <p style="font-size: 13px; margin-top: 8px;">${t("emptyNoUnreadHint")}</p>
+            </div>
+          `;
+          return;
+        }
+
         container.innerHTML = displayStories
           .map((s, i) => {
             const isClicked = clickedHnIds.has(s.hn_id);
@@ -1886,6 +1977,21 @@
         } else {
           // Show all stories with unclicked first
           displayStories = [...unclickedStories, ...clickedStoriesList];
+        }
+
+        // Check for empty unread list
+        if (showOnlyRead && displayStories.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <p>${t("emptyNoUnread")}</p>
+              <p style="font-size: 13px; margin-top: 8px;">${t("emptyNoUnreadHint")}</p>
+            </div>
+          `;
+          return;
         }
 
         container.innerHTML = displayStories
