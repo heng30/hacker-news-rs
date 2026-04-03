@@ -14,6 +14,7 @@ pub const ENV_LLM_TIMEOUT: &str = "HACKER_NEWS_LLM_TIMEOUT";
 pub const ENV_FETCH_HTML_TIMEOUT: &str = "HACKER_NEWS_FETCH_HTML_TIMEOUT";
 pub const ENV_MAX_MARKDOWN_CONTENT_LENGTH: &str = "HACKER_NEWS_MARKDOWN_MAX_CONTENT_LENGTH";
 pub const ENV_TOP_STORY_MIN_SCORE: &str = "HACKER_NEWS_TOP_STORY_MIN_SCORE";
+pub const ENV_SUMMARY_CONCURRENCY: &str = "HACKER_NEWS_SUMMARY_CONCURRENCY";
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -121,4 +122,11 @@ pub fn get_top_story_min_score_from_env() -> i64 {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(500)
+}
+
+pub fn get_summary_concurrency_from_env() -> usize {
+    env::var(ENV_SUMMARY_CONCURRENCY)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3)
 }

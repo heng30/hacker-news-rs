@@ -15,7 +15,7 @@ use hacker_news_rs::{
     config::{
         get_llm_config_from_env, get_llm_no_stream_from_env, get_llm_timeout,
         get_llm_user_agent_from_env, get_search_keywords_from_env,
-        get_top_story_min_score_from_env,
+        get_summary_concurrency_from_env, get_top_story_min_score_from_env,
     },
     db::{self, EpisodeWithStories},
 };
@@ -224,7 +224,6 @@ async fn fetch_stories(
         top_ids.len() - top_stories.len()
     );
 
-    // Fetch keyword search results from Algolia
     let keywords = get_search_keywords_from_env();
     let search_stories = if let Some(kws) = keywords {
         tracing::info!("Searching for keywords: {:?}", kws);
@@ -249,7 +248,7 @@ async fn fetch_stories(
                 }
                 Err(e) => {
                     tracing::warn!(
-                        "Failed to search Algolia for '{}': {}. Skipping this keyword.",
+                        "Failed to search for '{}': {}. Skipping this keyword.",
                         kw,
                         e
                     );
@@ -361,7 +360,7 @@ async fn fetch_stories(
             tracing::error!("Failed to save story {}: {}", story.hn_id, e);
             continue;
         }
-        // Insert URL hash for deduplication
+
         let hash = db::compute_dedup_hash(story.url.as_deref(), &story.title);
         if let Err(e) = db::insert_url_hash(&state.pool, &hash, story.hn_id).await {
             tracing::error!("Failed to insert URL hash for story {}: {}", story.hn_id, e);
@@ -778,7 +777,6 @@ pub async fn fetch_stories_background(
         get_llm_timeout(),
     );
 
-    // Save stories without summaries first
     let mut saved_stories: Vec<(hacker_news_rs::db::Story, i64)> = Vec::new();
     for hn_story in all_hn_stories {
         let mut story: hacker_news_rs::db::Story = hn_story.into();
@@ -800,9 +798,10 @@ pub async fn fetch_stories_background(
         }
     }
 
-    // Generate summaries in parallel with concurrency control
     let mut stories_count = 0;
-    for chunk in saved_stories.chunks(3) {
+    let concurrency = get_summary_concurrency_from_env();
+
+    for chunk in saved_stories.chunks(concurrency) {
         let futures: Vec<_> = chunk
             .iter()
             .map(|(story, story_id)| {
@@ -999,9 +998,10 @@ async fn fetch_stories_stream_task(
         }
     }
 
-    // Generate summaries in parallel with concurrency control (3-5 per batch)
     let mut stories_count = 0;
-    for chunk in saved_stories.chunks(3) {
+    let concurrency = get_summary_concurrency_from_env();
+
+    for chunk in saved_stories.chunks(concurrency) {
         let futures: Vec<_> = chunk
             .iter()
             .map(|(story, story_id)| {

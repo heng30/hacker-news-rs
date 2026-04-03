@@ -8,7 +8,7 @@ use axum::{
 };
 use hacker_news_rs::config::{
     get_auto_update_interval_from_env, get_llm_config_from_env, get_search_keywords_from_env,
-    get_socks5_proxy_from_env,
+    get_socks5_proxy_from_env, get_summary_concurrency_from_env,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -21,6 +21,7 @@ struct ConfigResponse {
     masked_api_key: String,
     socks5_proxy: Option<String>,
     search_keywords: Option<String>,
+    summary_concurrency: usize,
 }
 
 #[derive(Serialize)]
@@ -70,6 +71,7 @@ async fn get_config(
         masked_api_key,
         socks5_proxy: get_socks5_proxy_from_env(),
         search_keywords: get_search_keywords_from_env().map(|kws| kws.join(",")),
+        summary_concurrency: get_summary_concurrency_from_env(),
     };
 
     Ok(Json(ApiResponse::success(response)))
