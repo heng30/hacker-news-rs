@@ -1152,7 +1152,7 @@
       let episodesWithDates = new Set();
       let currentLang = localStorage.getItem("lang") || "en";
       let showOnlyRead = localStorage.getItem("showOnlyRead") === "true";
-      let summaryConcurrency = 3; // Default, updated from server config
+      let summaryConcurrency = 3;
 
       // i18n messages
       const i18n = {
@@ -1462,6 +1462,7 @@
           }
         });
 
+        await loadConfig();
         await loadEpisodes();
         await loadLatestEpisode();
         await checkAndRegenerateMissingSummaries();
@@ -1536,7 +1537,6 @@
                         </div>
                     `;
 
-            // Store summary concurrency for batch regeneration
             summaryConcurrency = config.summary_concurrency || 3;
           }
         } catch (error) {
@@ -2240,8 +2240,9 @@
             : `Regenerating ${missingStories.length} missing English summaries`;
         showToast(toastMsg, "loading", 5000);
 
-        // Regenerate in batches (using server-configured concurrency)
         const batchSize = summaryConcurrency;
+        console.log("summaryConcurrency: ", summaryConcurrency);
+
         for (let i = 0; i < missingStories.length; i += batchSize) {
           const batch = missingStories.slice(i, i + batchSize);
           await Promise.all(
