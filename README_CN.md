@@ -283,10 +283,10 @@ API 参考：https://hn.algolia.com/api
 ## 摘要生成流程
 
 ```
-HN API → 故事元数据 → 抓取 URL 内容 → HTML→Markdown → LLM → 摘要 → SQLite → 前端
+HN API → 故事元数据 → 抓取 URL 内容 → 提取文本 → LLM → 摘要 → SQLite → 前端
 ```
 
-1. **内容抓取**：从故事 URL 获取 HTML（30 秒超时），使用 `htmd` 库转换为 Markdown
+1. **内容抓取**：从故事 URL 获取 HTML（30 秒超时），使用 `scraper` 库提取纯文本
 2. **内容限制**：超过 32,000 字符时截断
 3. **失败回退**：内容抓取失败时，LLM 仅使用标题和 URL
 4. **LLM 提示词**：标题 + 内容发送给 LLM，附带语言特定指令

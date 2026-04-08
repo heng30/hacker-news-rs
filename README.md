@@ -283,10 +283,10 @@ The `tag` field indicates the source:
 ## Summary Generation Flow
 
 ```
-HN API → Story Metadata → Fetch URL Content → HTML→Markdown → LLM → Summary → SQLite → Frontend
+HN API → Story Metadata → Fetch URL Content → Extract Text → LLM → Summary → SQLite → Frontend
 ```
 
-1. **Content Fetching**: Fetch HTML from story URL (30s timeout), convert to Markdown using `htmd` library
+1. **Content Fetching**: Fetch HTML from story URL (30s timeout), extract plain text using `scraper` library
 2. **Content Limit**: Truncate to 32,000 characters if too long
 3. **Fallback**: If content fetch fails, LLM uses title and URL only
 4. **LLM Prompt**: Title + content sent to LLM with language-specific instructions

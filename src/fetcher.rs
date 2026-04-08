@@ -1,10 +1,15 @@
 use crate::config;
 use anyhow::Result;
-use htmd::HtmlToMarkdown;
+use scraper::Html;
 use std::time::Duration;
 
 pub const USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0";
+
+const SKIP_TAGS: &[&str] = &[
+    "script", "style", "noscript", "svg", "canvas", "iframe", "embed", "object", "img", "video",
+    "audio", "nav", "footer", "aside", "form",
+];
 
 pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
     let mut client_builder = reqwest::Client::builder()
@@ -42,35 +47,51 @@ pub async fn fetch_url_content(url: &str) -> Result<Option<String>> {
         }
     };
 
-    let converter = HtmlToMarkdown::builder()
-        .skip_tags(vec![
-            "img", "video", "audio", "source", // Media elements
-            "script", "style", "noscript", // Script/style elements
-            "iframe", "embed", "object", // Embedded content
-            "canvas", "svg", // Graphics
-            "form", "input", "button", // Form elements
-            "nav", "footer", "aside", // Navigation/structural
-            "meta", "link", // Metadata
-        ])
-        .build();
-    let markdown = match converter.convert(&html) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!("Failed to convert HTML to Markdown for {}: {}", url, e);
-            return Ok(None);
-        }
-    };
+    let text = extract_text(&html);
 
-    let truncated = if markdown.len() > config::get_max_markdown_content_length() as usize {
+    let truncated = if text.len() > config::get_max_content_length() as usize {
         tracing::debug!(
             "Content truncated from {} to {} characters",
-            markdown.len(),
-            config::get_max_markdown_content_length()
+            text.len(),
+            config::get_max_content_length()
         );
-        &markdown[..config::get_max_markdown_content_length() as usize]
+        &text[..config::get_max_content_length() as usize]
     } else {
-        &markdown
+        &text
     };
 
     Ok(Some(truncated.to_string()))
 }
+
+fn extract_text(html: &str) -> String {
+    let mut document = Html::parse_document(html);
+    let root = document.tree.root();
+    let mut to_detach = Vec::new();
+
+    for node in root.descendants() {
+        if let Some(element) = node.value().as_element()
+            && SKIP_TAGS.contains(&element.name.local.as_ref())
+        {
+            to_detach.push(node.id());
+        }
+    }
+
+    for node_id in to_detach {
+        if let Some(mut node) = document.tree.get_mut(node_id) {
+            node.detach();
+        }
+    }
+
+    let text: String = document
+        .tree
+        .root()
+        .descendants()
+        .filter_map(|n| n.value().as_text())
+        .map(|t| t.text.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+

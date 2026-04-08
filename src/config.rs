@@ -12,7 +12,7 @@ pub const ENV_LLM_NO_STREAM: &str = "HACKER_NEWS_LLM_NO_STREAM";
 pub const ENV_LLM_USER_AGENT: &str = "HACKER_NEWS_LLM_USER_AGENT";
 pub const ENV_LLM_TIMEOUT: &str = "HACKER_NEWS_LLM_TIMEOUT";
 pub const ENV_FETCH_HTML_TIMEOUT: &str = "HACKER_NEWS_FETCH_HTML_TIMEOUT";
-pub const ENV_MAX_MARKDOWN_CONTENT_LENGTH: &str = "HACKER_NEWS_MARKDOWN_MAX_CONTENT_LENGTH";
+pub const ENV_MAX_CONTENT_LENGTH: &str = "HACKER_NEWS_MAX_CONTENT_LENGTH";
 pub const ENV_TOP_STORY_MIN_SCORE: &str = "HACKER_NEWS_TOP_STORY_MIN_SCORE";
 pub const ENV_SUMMARY_CONCURRENCY: &str = "HACKER_NEWS_SUMMARY_CONCURRENCY";
 
@@ -110,8 +110,8 @@ pub fn get_fetch_html_timeout() -> u32 {
         .unwrap_or(30)
 }
 
-pub fn get_max_markdown_content_length() -> u32 {
-    env::var(ENV_MAX_MARKDOWN_CONTENT_LENGTH)
+pub fn get_max_content_length() -> u32 {
+    env::var(ENV_MAX_CONTENT_LENGTH)
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(16000)

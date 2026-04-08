@@ -17,7 +17,6 @@ description = "Hacker News RSS Generator with AI Summaries"
 log = "0.4"
 axum = "0.8"
 sqlx = "0.8"
-htmd = "0.5"
 tokio = "1.0"
 serde = "1.0"
 anyhow = "1.0"
@@ -28,6 +27,7 @@ tracing = "0.1"
 futures = "0.3"
 reqwest = "0.13"
 dotenvy = "0.15"
+scraper = "0.26"
 thiserror = "2.0"
 tower-http = "0.6"
 serde_json = "1.0"
@@ -43,7 +43,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-htmd.workspace = true
 axum.workspace = true
 blake3.workspace = true
 anyhow.workspace = true
@@ -62,3 +61,4 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 reqwest = { workspace = true, features = ["json", "stream", "socks"] }
 
 bot = { path = "lib/bot" }
+scraper.workspace = true

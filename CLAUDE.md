@@ -28,13 +28,13 @@ This is a Rust web service that fetches Hacker News stories and generates AI sum
 ### Data Flow
 
 ```
-HN API → Story metadata → URL content fetch → HTML→Markdown → LLM → Summary → SQLite → REST API → Frontend
+HN API → Story metadata → URL content fetch → Text extraction → LLM → Summary → SQLite → REST API → Frontend
 ```
 
 ### Key Modules
 
 - `src/hn/api.rs`: HN Firebase API + Algolia search API client
-- `src/fetcher/content.rs`: URL content fetching with HTML→Markdown conversion (htmd library)
+- `src/fetcher.rs`: URL content fetching with text extraction using scraper
 - `src/llm/client.rs`: LLM summarization wrapper using the `bot` library
 - `src/db/`: SQLite operations with sqlx (models + CRUD)
 - `src/routes/`: Axum routes (episode.rs for stories, config.rs for settings)
@@ -62,5 +62,5 @@ Stories are grouped by date into "episodes". Each fetch creates/updates an episo
 - `axum` + `tower-http`: Web framework with CORS and static file serving
 - `sqlx` with SQLite: Async database
 - `reqwest`: HTTP client for HN/Algolia/LLM APIs
-- `htmd`: HTML to Markdown conversion
+- `scraper`: HTML parsing and text extraction
 - `bot` (local): LLM streaming chat abstraction
