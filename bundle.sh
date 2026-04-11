@@ -40,6 +40,12 @@ else
     echo -e "${RED}Warning: .env file not found${NC}"
 fi
 
+# Copy .env.example
+if [ -f ".env.example" ]; then
+    cp ".env.example" "$OUTPUT_DIR/"
+    echo -e "${GREEN}✓${NC} Copied .env.example"
+fi
+
 # Copy static files
 if [ -f "$STATIC_FILE" ]; then
     cp "$STATIC_FILE" "$OUTPUT_DIR/src/static/"
@@ -59,6 +65,7 @@ echo "Directory structure:"
 echo "  $OUTPUT_DIR/"
 echo "  ├── hacker-news-rs"
 echo "  ├── .env"
+echo "  ├── .env.example"
 echo "  └── src/static/index.html"
 echo ""
 echo "To run:"
