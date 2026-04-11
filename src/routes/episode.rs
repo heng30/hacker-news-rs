@@ -24,6 +24,9 @@ use sqlx::SqlitePool;
 use std::{collections::HashSet, sync::Arc, sync::RwLock};
 use tokio_stream::StreamExt as _;
 
+const ERROR_MSG_EN: &str = "Failed to generate summary";
+const ERROR_MSG_ZH: &str = "生成摘要失败";
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: SqlitePool,
@@ -348,10 +351,17 @@ async fn fetch_stories(
                 if first_error.is_none() {
                     first_error = Some(e.to_string());
                 }
+
                 if lang == "en" {
-                    story.summary = Some("Failed to generate summary".to_string());
+                    if story.summary.is_none() || story.summary.as_deref() == Some(ERROR_MSG_EN) {
+                        story.summary = Some(ERROR_MSG_EN.to_string());
+                    }
                 } else {
-                    story.summary_zh = Some("生成摘要失败".to_string());
+                    if story.summary_zh.is_none()
+                        || story.summary_zh.as_deref() == Some(ERROR_MSG_ZH)
+                    {
+                        story.summary_zh = Some(ERROR_MSG_ZH.to_string());
+                    }
                 }
             }
         }
