@@ -1,5 +1,5 @@
 use super::fetcher::USER_AGENT;
-use crate::db::HnStory;
+use crate::{config, db::HnStory};
 use anyhow::Result;
 use serde::Deserialize;
 use std::{
@@ -46,9 +46,21 @@ impl From<HnStoryRaw> for HnStory {
 
 impl HnClient {
     pub fn new() -> Self {
+        let mut client_builder = reqwest::Client::builder().user_agent(USER_AGENT);
+
+        if let Some(proxy) = config::get_socks5_proxy_from_env() {
+            let proxy_url = if proxy.starts_with("socks5://") || proxy.starts_with("socks5h://") {
+                proxy
+            } else {
+                format!("socks5://{}", proxy)
+            };
+            client_builder = client_builder
+                .proxy(reqwest::Proxy::all(&proxy_url).expect("Failed to create SOCKS5 proxy"));
+            tracing::info!("HnClient using SOCKS5 proxy: {}", proxy_url);
+        }
+
         Self {
-            client: reqwest::Client::builder()
-                .user_agent(USER_AGENT)
+            client: client_builder
                 .build()
                 .expect("Failed to create HTTP client"),
         }
