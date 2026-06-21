@@ -1,5 +1,6 @@
 #[cfg(feature = "ssr")]
 use std::{
+    convert::Infallible,
     net::{IpAddr, SocketAddr},
     process,
     sync::Arc,
@@ -9,9 +10,13 @@ use std::{
 #[cfg(feature = "ssr")]
 use axum::Router;
 #[cfg(feature = "ssr")]
-use axum::routing::post;
+use axum::response::sse::{Event, KeepAlive, Sse};
+#[cfg(feature = "ssr")]
+use axum::routing::{get, post};
 #[cfg(feature = "ssr")]
 use clap::Parser;
+#[cfg(feature = "ssr")]
+use futures::stream::Stream;
 #[cfg(feature = "ssr")]
 use hns::config::AppConfig;
 #[cfg(feature = "ssr")]
@@ -24,6 +29,8 @@ use hns::state::AppState;
 use leptos::{config::LeptosOptions, prelude::*};
 #[cfg(feature = "ssr")]
 use leptos_axum::{LeptosRoutes, generate_route_list};
+#[cfg(feature = "ssr")]
+use tokio_stream::StreamExt;
 
 /// Wrapper state that holds both LeptosOptions and AppState
 #[cfg(feature = "ssr")]
@@ -119,11 +126,14 @@ async fn main() {
         .build()
         .expect("Failed to create HTTP client");
 
+    // Create broadcast channel for SSE fetch events
+    let (event_tx, _) = tokio::sync::broadcast::channel::<hns::models::FetchEvent>(256);
+
     let app_state = Arc::new(AppState {
         db: Arc::new(sled_db),
         config: Arc::new(config.clone()),
         http_client: http_client.clone(),
-        fetch_progress: Arc::new(dashmap::DashMap::new()),
+        fetch_events: event_tx,
     });
 
     // Background auto-update thread
@@ -167,6 +177,7 @@ async fn main() {
     let routes = generate_route_list(hns::app::App);
 
     let app = Router::new()
+        .route("/api/fetch-events", get(fetch_events_sse))
         .route(
             "/api/{*fn_name}",
             post({
@@ -204,6 +215,22 @@ async fn main() {
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
+}
+
+/// SSE endpoint for fetch events
+#[cfg(feature = "ssr")]
+async fn fetch_events_sse(
+    axum::extract::State(app_state): axum::extract::State<Arc<AppState>>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = app_state.fetch_events.subscribe();
+    let stream = tokio_stream::wrappers::BroadcastStream::new(rx).filter_map(|msg| match msg {
+        Ok(event) => {
+            let data = serde_json::to_string(&event).ok()?;
+            Some(Ok(Event::default().data(data)))
+        }
+        Err(_) => None,
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 /// Background fetch for auto-update

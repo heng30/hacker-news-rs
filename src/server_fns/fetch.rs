@@ -1,14 +1,12 @@
 use leptos::prelude::*;
 use server_fn::error::ServerFnError;
 
-use crate::models::FetchProgress;
-
 #[cfg(feature = "ssr")]
 use std::collections::HashSet;
 #[cfg(feature = "ssr")]
 use std::sync::Arc;
 #[cfg(feature = "ssr")]
-use crate::models::{HnStory, Story};
+use crate::models::{FetchEvent, HnStory, Story};
 #[cfg(feature = "ssr")]
 use crate::state::AppState;
 
@@ -18,7 +16,7 @@ fn app_state() -> Result<Arc<AppState>, ServerFnError> {
         .ok_or_else(|| ServerFnError::new("AppState not found"))
 }
 
-/// Start a background fetch and return a fetch_id for polling
+/// Start a background fetch and return a fetch_id for SSE subscription
 #[server]
 pub async fn start_fetch() -> Result<String, ServerFnError> {
     let state = app_state()?;
@@ -28,45 +26,20 @@ pub async fn start_fetch() -> Result<String, ServerFnError> {
     }
 
     let fetch_id = uuid::Uuid::new_v4().to_string();
-    let fetch_id_clone = fetch_id.clone();
-
-    // Initialize progress
-    state.fetch_progress.insert(
-        fetch_id.clone(),
-        FetchProgress {
-            fetch_id: fetch_id.clone(),
-            ..Default::default()
-        },
-    );
 
     // Spawn background task
     let db = state.db.clone();
     let config = state.config.clone();
     let http_client = state.http_client.clone();
-    let fetch_progress = state.fetch_progress.clone();
+    let event_tx = state.fetch_events.clone();
 
     tokio::spawn(async move {
-        if let Err(e) = fetch_stories_task(db, config, http_client, &fetch_id_clone, fetch_progress.clone()).await {
+        if let Err(e) = fetch_stories_task(db, config, http_client, event_tx).await {
             tracing::error!("Fetch task error: {}", e);
-            if let Some(mut progress) = fetch_progress.get_mut(&fetch_id_clone) {
-                progress.finished = true;
-            }
         }
     });
 
     Ok(fetch_id)
-}
-
-/// Poll fetch progress
-#[server]
-pub async fn get_fetch_status(fetch_id: String) -> Result<FetchProgress, ServerFnError> {
-    let state = app_state()?;
-
-    let result = match state.fetch_progress.get(&fetch_id) {
-        Some(progress) => Ok(progress.clone()),
-        None => Err(ServerFnError::new("Fetch not found")),
-    };
-    result
 }
 
 #[cfg(feature = "ssr")]
@@ -74,8 +47,7 @@ async fn fetch_stories_task(
     db: Arc<sled::Db>,
     config: Arc<crate::config::AppConfig>,
     http_client: reqwest::Client,
-    fetch_id: &str,
-    fetch_progress: Arc<dashmap::DashMap<String, FetchProgress>>,
+    event_tx: tokio::sync::broadcast::Sender<FetchEvent>,
 ) -> anyhow::Result<()> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let episode = crate::db::create_episode(&db, &today)?;
@@ -146,20 +118,19 @@ async fn fetch_stories_task(
         }
     }
 
-    tracing::info!("Total {} unique stories to process", all_hn_stories.len());
-
-    if let Some(mut progress) = fetch_progress.get_mut(fetch_id) {
-        progress.total_stories = all_hn_stories.len();
-    }
+    let total_stories = all_hn_stories.len();
+    tracing::info!("Total {} unique stories to process", total_stories);
 
     if all_hn_stories.is_empty() {
-        if let Some(mut progress) = fetch_progress.get_mut(fetch_id) {
-            progress.finished = true;
-        }
+        let _ = event_tx.send(FetchEvent::Finished {
+            total: 0,
+            summaries: 0,
+            errors: 0,
+        });
         return Ok(());
     }
 
-    // Save stories first (without summaries)
+    // Save stories one by one, emit event for each
     let llm_client = crate::llm::LlmClient::new(config.clone(), http_client);
     let mut saved_stories: Vec<Story> = Vec::new();
 
@@ -172,17 +143,15 @@ async fn fetch_stories_task(
         crate::db::mark_url_seen(&db, url_key)?;
 
         if let Some(saved) = crate::db::get_story_by_hn_id(&db, story.hn_id)? {
-            if let Some(mut progress) = fetch_progress.get_mut(fetch_id) {
-                progress.stories_added += 1;
-                progress.stories.push(saved.clone());
-            }
             saved_stories.push(saved);
+            let _ = event_tx.send(FetchEvent::StoryAdded { hn_id: story.hn_id });
         }
     }
 
-    // Generate summaries in batches
+    // Generate summaries in batches, emit event for each completed summary
     let concurrency = config.summary_concurrency;
-    let mut stories_count = 0;
+    let mut summaries_count = 0usize;
+    let mut errors_count = 0usize;
 
     for chunk in saved_stories.chunks(concurrency) {
         let futures: Vec<_> = chunk
@@ -208,7 +177,7 @@ async fn fetch_stories_task(
                         }
                         Err(e) => {
                             tracing::error!("Failed to summarize {}: {}", story_clone.hn_id, e);
-                            Err(e)
+                            Err(story_clone.hn_id)
                         }
                     }
                 }
@@ -216,22 +185,27 @@ async fn fetch_stories_task(
             .collect();
 
         let results = futures::future::join_all(futures).await;
-        let success_count = results.iter().filter(|r| r.is_ok()).count();
-        let error_count = results.iter().filter(|r| r.is_err()).count();
-        stories_count += success_count;
 
-        if let Some(mut progress) = fetch_progress.get_mut(fetch_id) {
-            progress.summaries_done += success_count;
-            progress.summaries_error += error_count;
+        for result in &results {
+            match result {
+                Ok(hn_id) => {
+                    summaries_count += 1;
+                    let _ = event_tx.send(FetchEvent::SummaryDone { hn_id: *hn_id });
+                }
+                Err(hn_id) => {
+                    errors_count += 1;
+                    let _ = event_tx.send(FetchEvent::SummaryError { hn_id: *hn_id });
+                }
+            }
         }
     }
 
-    // Refresh stories list from DB
-    if let Some(mut progress) = fetch_progress.get_mut(fetch_id) {
-        progress.stories = crate::db::get_stories_by_episode(&db, &episode.date).unwrap_or_default();
-        progress.finished = true;
-    }
+    let _ = event_tx.send(FetchEvent::Finished {
+        total: total_stories,
+        summaries: summaries_count,
+        errors: errors_count,
+    });
 
-    tracing::info!("Fetch completed: {} stories processed", stories_count);
+    tracing::info!("Fetch completed: {} summaries, {} errors", summaries_count, errors_count);
     Ok(())
 }

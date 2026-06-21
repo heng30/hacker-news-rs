@@ -12,7 +12,7 @@ use crate::models::Story;
 use crate::server_fns::episodes::{
     get_episode_by_date, get_episodes, get_latest_episode,
 };
-use crate::server_fns::fetch::{get_fetch_status, start_fetch};
+use crate::server_fns::fetch::start_fetch;
 use crate::server_fns::stories::regenerate_summary;
 
 /// Main home page component
@@ -40,10 +40,39 @@ pub fn HomePage() -> impl IntoView {
     }
     // Show only unread stories
     let (show_only_unread, set_show_only_unread) = signal(false);
-    // Currently selected date
-    let (selected_date, set_selected_date) = signal(None::<String>);
     // Read stories (client-side)
     let (read_stories, set_read_stories) = signal(HashSet::<i64>::new());
+
+    // On client mount, restore persisted state from localStorage
+    // Using Effect ensures this runs after hydration is complete
+    Effect::new(move |_| {
+        if leptos::prelude::is_server() {
+            return;
+        }
+
+        let ls = leptos::prelude::window()
+            .local_storage()
+            .ok()
+            .flatten();
+
+        if let Some(ls) = ls {
+            // Restore show_only_unread
+            if let Some(val) = ls.get_item("hns-show-unread").ok().flatten() {
+                if val == "true" {
+                    set_show_only_unread.set(true);
+                }
+            }
+
+            // Restore read_stories
+            if let Some(json) = ls.get_item("hns-read-stories").ok().flatten() {
+                if let Ok(reads) = serde_json::from_str::<HashSet<i64>>(&json) {
+                    set_read_stories.set(reads);
+                }
+            }
+        }
+    });
+    // Currently selected date
+    let (selected_date, set_selected_date) = signal(None::<String>);
     // Calendar modal
     let (calendar_open, set_calendar_open) = signal(false);
     // Settings modal
@@ -109,15 +138,20 @@ pub fn HomePage() -> impl IntoView {
             "loading".to_string(),
         );
 
+        let episode_resource = episode_resource;
+        let episodes_resource = episodes_resource;
+        let set_is_fetching = set_is_fetching;
+        let show_toast = show_toast;
+
         spawn_local(async move {
             match start_fetch().await {
-                Ok(fetch_id) => {
-                    poll_fetch_status(
-                        fetch_id,
-                        set_is_fetching,
-                        show_toast,
+                Ok(_fetch_id) => {
+                    // Connect to SSE for real-time updates
+                    listen_fetch_events(
                         episode_resource,
                         episodes_resource,
+                        set_is_fetching,
+                        show_toast,
                     );
                 }
                 Err(e) => {
@@ -128,11 +162,18 @@ pub fn HomePage() -> impl IntoView {
         });
     };
 
-    // Mark story as read
+    // Mark story as read — persist to localStorage
     let mark_read = move |hn_id: i64| {
         let mut reads = read_stories.get();
         reads.insert(hn_id);
-        set_read_stories.set(reads);
+        set_read_stories.set(reads.clone());
+        if !leptos::prelude::is_server() {
+            if let Some(ls) = leptos::prelude::window().local_storage().ok().flatten() {
+                if let Ok(json) = serde_json::to_string(&reads) {
+                    let _ = ls.set_item("hns-read-stories", &json);
+                }
+            }
+        }
     };
 
     // Regenerate summary
@@ -193,7 +234,15 @@ pub fn HomePage() -> impl IntoView {
             is_fetching=is_fetching
             show_only_unread=show_only_unread
             on_refresh=Callback::new(move |_| do_fetch())
-            on_toggle_read=Callback::new(move |_| set_show_only_unread.update(|v| *v = !*v))
+            on_toggle_read=Callback::new(move |_| {
+                let new_val = !show_only_unread.get();
+                set_show_only_unread.set(new_val);
+                if !leptos::prelude::is_server() {
+                    if let Some(ls) = leptos::prelude::window().local_storage().ok().flatten() {
+                        let _ = ls.set_item("hns-show-unread", &new_val.to_string());
+                    }
+                }
+            })
             on_calendar=Callback::new(move |_| set_calendar_open.set(true))
             on_toggle_theme=Callback::new(move |_| toggle_theme())
             on_settings=Callback::new(move |_| set_settings_open.set(true))
@@ -211,7 +260,6 @@ pub fn HomePage() -> impl IntoView {
                     }>
                         {move || {
                             let stories = display_stories();
-                            let reads = read_stories.get();
 
                             if stories.is_empty() {
                                 view! {
@@ -226,23 +274,19 @@ pub fn HomePage() -> impl IntoView {
                                 }.into_any()
                             } else {
                                 view! {
-                                    <For
-                                        each=move || stories.clone()
-                                        key=|s: &Story| s.hn_id
-                                        children=move |story: Story| {
-                                            let is_read = reads.contains(&story.hn_id);
-                                            let idx = 0;
+                                    <div>
+                                        {stories.into_iter().enumerate().map(|(idx, story)| {
                                             view! {
                                                 <StoryCard
                                                     story=story
                                                     index=idx
-                                                    is_read=is_read
+                                                    read_stories=read_stories
                                                     on_mark_read=Callback::new(move |id| mark_read(id))
                                                     on_regenerate=Callback::new(move |id| do_regenerate(id))
                                                 />
                                             }
-                                        }
-                                    />
+                                        }).collect::<Vec<_>>()}
+                                    </div>
                                 }.into_any()
                             }
                         }}
@@ -279,43 +323,71 @@ pub fn HomePage() -> impl IntoView {
     }
 }
 
-/// Poll fetch status using set_timeout (works in both SSR and WASM)
-fn poll_fetch_status(
-    fetch_id: String,
-    set_is_fetching: WriteSignal<bool>,
-    show_toast: impl Fn(String, String) + 'static,
+/// Listen to SSE fetch events for real-time UI updates (client only)
+#[cfg(not(feature = "ssr"))]
+fn listen_fetch_events(
     episode_resource: Resource<Option<crate::models::EpisodeWithStories>>,
     episodes_resource: Resource<Vec<crate::models::Episode>>,
+    set_is_fetching: WriteSignal<bool>,
+    show_toast: impl Fn(String, String) + 'static,
 ) {
-    spawn_local(async move {
-        match get_fetch_status(fetch_id.clone()).await {
-            Ok(progress) => {
-                if progress.finished {
-                    set_is_fetching.set(false);
-                    show_toast(
-                        format!("已获取 {} 篇故事", progress.summaries_done),
-                        "success".to_string(),
-                    );
-                    episode_resource.refetch();
-                    episodes_resource.refetch();
-                } else {
-                    set_timeout(
-                        move || {
-                            poll_fetch_status(
-                                fetch_id,
-                                set_is_fetching,
-                                show_toast,
-                                episode_resource,
-                                episodes_resource,
-                            );
-                        },
-                        std::time::Duration::from_secs(2),
-                    );
+    use wasm_bindgen::closure::Closure;
+    use wasm_bindgen::JsCast;
+
+    let es = web_sys::EventSource::new("/api/fetch-events").unwrap();
+
+    let on_message = {
+        let es = es.clone();
+        Closure::<dyn Fn(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
+            let data = e.data().as_string().unwrap_or_default();
+            if let Ok(event) = serde_json::from_str::<crate::models::FetchEvent>(&data) {
+                match event {
+                    crate::models::FetchEvent::StoryAdded { .. } => {
+                        episode_resource.refetch();
+                    }
+                    crate::models::FetchEvent::SummaryDone { .. } => {
+                        episode_resource.refetch();
+                    }
+                    crate::models::FetchEvent::SummaryError { .. } => {
+                        episode_resource.refetch();
+                    }
+                    crate::models::FetchEvent::Finished { summaries, .. } => {
+                        set_is_fetching.set(false);
+                        episodes_resource.refetch();
+                        show_toast(
+                            format!("已获取 {} 篇故事", summaries),
+                            "success".to_string(),
+                        );
+                        // Close the EventSource after finished
+                        es.close();
+                    }
                 }
             }
-            Err(_) => {
+        })
+    };
+
+    let on_error = {
+        let es = es.clone();
+        Closure::<dyn Fn(web_sys::Event)>::new(move |_: web_sys::Event| {
+            if es.ready_state() == web_sys::EventSource::CLOSED {
                 set_is_fetching.set(false);
             }
-        }
-    });
+        })
+    };
+
+    es.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+    on_message.forget();
+    es.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+    on_error.forget();
+}
+
+/// SSR stub — SSE listening only works on the client
+#[cfg(feature = "ssr")]
+fn listen_fetch_events(
+    _episode_resource: Resource<Option<crate::models::EpisodeWithStories>>,
+    _episodes_resource: Resource<Vec<crate::models::Episode>>,
+    _set_is_fetching: WriteSignal<bool>,
+    _show_toast: impl Fn(String, String) + 'static,
+) {
+    // No-op on server
 }

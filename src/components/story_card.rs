@@ -7,11 +7,10 @@ use crate::models::Story;
 pub fn StoryCard(
     story: Story,
     index: usize,
-    is_read: bool,
+    read_stories: ReadSignal<std::collections::HashSet<i64>>,
     on_mark_read: Callback<i64>,
     on_regenerate: Callback<i64>,
 ) -> impl IntoView {
-    let clicked_class = if is_read { "story clicked" } else { "story" };
     let hn_id = story.hn_id;
     let title = story.title.clone();
     let url = story.url.clone().unwrap_or_default();
@@ -19,11 +18,9 @@ pub fn StoryCard(
     let score = story.score;
     let tag = story.tag.clone();
     let summary = story.summary.clone();
-    let has_summary = summary.is_some();
-    let display_summary = summary.unwrap_or_default();
 
     view! {
-        <div class=clicked_class>
+        <div class=move || if read_stories.get().contains(&hn_id) { "story clicked" } else { "story" }>
             <div class="story-title">
                 <a href=url target="_blank" on:click=move |_| on_mark_read.run(hn_id)>
                     {format!("{}. {}", index + 1, title)}
@@ -32,10 +29,10 @@ pub fn StoryCard(
                     <button
                         class="mark-read-btn"
                         on:click=move |_| on_mark_read.run(hn_id)
-                        disabled=is_read
+                        disabled=move || read_stories.get().contains(&hn_id)
                         title="标为已读"
                     >
-                        {if is_read {
+                        {move || if read_stories.get().contains(&hn_id) {
                             view! {
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <polyline points="20 6 9 17 4 12"/>
@@ -72,18 +69,25 @@ pub fn StoryCard(
                 {format!(" | ")}
                 <a href=format!("https://news.ycombinator.com/item?id={}", hn_id) target="_blank">"讨论"</a>
             </div>
-            {if has_summary && !display_summary.is_empty() {
-                view! {
-                    <div class="story-summary" inner_html=display_summary></div>
-                }.into_any()
-            } else if !has_summary {
-                view! {
-                    <div class="story-summary placeholder">
-                        "生成摘要中..."
-                    </div>
-                }.into_any()
-            } else {
-                view! { <div></div> }.into_any()
+            {move || {
+                let reads = read_stories.get();
+                let has_summary = summary.is_some();
+                let display_summary = summary.clone().unwrap_or_default();
+                let is_read = reads.contains(&hn_id);
+
+                if has_summary && !display_summary.is_empty() {
+                    view! {
+                        <div class="story-summary" inner_html=display_summary></div>
+                    }.into_any()
+                } else if !has_summary && !is_read {
+                    view! {
+                        <div class="story-summary placeholder">
+                            "生成摘要中..."
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }
             }}
         </div>
     }

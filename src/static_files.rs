@@ -31,7 +31,11 @@ pub async fn static_handler(req: Request<Body>) -> impl IntoResponse {
                     .as_ref()
                     .to_string();
                 let body = Body::from(asset.data.into_owned());
-                return (StatusCode::OK, [(header::CONTENT_TYPE, mime)], body).into_response();
+                let headers = [
+                    (header::CONTENT_TYPE, mime),
+                    (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
+                ];
+                return (StatusCode::OK, headers, body).into_response();
             }
             None => {
                 return (
@@ -52,7 +56,13 @@ pub async fn static_handler(req: Request<Body>) -> impl IntoResponse {
                 .as_ref()
                 .to_string();
             let body = Body::from(asset.data.into_owned());
-            (StatusCode::OK, [(header::CONTENT_TYPE, mime)], body).into_response()
+            // CSS and other public assets should not be aggressively cached
+            // so updates are visible after rebuild
+            let headers = [
+                (header::CONTENT_TYPE, mime),
+                (header::CACHE_CONTROL, "no-cache".to_string()),
+            ];
+            (StatusCode::OK, headers, body).into_response()
         }
         None => (
             StatusCode::NOT_FOUND,

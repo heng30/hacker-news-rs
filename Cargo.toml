@@ -20,7 +20,7 @@ leptos_router = "0.8"
 serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 leptos = { version = "0.8", features = ["nightly"] }
-web-sys = { version = "0.3", features = ["Storage"] }
+web-sys = { version = "0.3", features = ["Storage", "EventSource"] }
 
 log = { version = "0.4", optional = true }
 anyhow = { version = "1", optional = true }
@@ -35,7 +35,7 @@ mime_guess = { version = "2", optional = true }
 scraper = { version = "0.27", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 leptos_axum = { version = "0.8", optional = true }
-tokio-stream = { version = "0.1", optional = true }
+tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 platform-dirs = { version = "0.3", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
 tokio = { version = "1", features = ["full"], optional = true }

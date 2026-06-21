@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use dashmap::DashMap;
 use sled::Db;
+use tokio::sync::broadcast;
 
 use crate::config::AppConfig;
-use crate::models::FetchProgress;
+use crate::models::FetchEvent;
 
 /// Shared application state available to all handlers and server_fns
 #[derive(Clone)]
@@ -15,6 +15,6 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
     /// HTTP client (with optional SOCKS5 proxy)
     pub http_client: reqwest::Client,
-    /// Active fetch progress tracking
-    pub fetch_progress: Arc<DashMap<String, FetchProgress>>,
+    /// Broadcast channel for SSE fetch events
+    pub fetch_events: broadcast::Sender<FetchEvent>,
 }

@@ -62,16 +62,17 @@ pub struct EpisodeWithStories {
     pub stories: Vec<Story>,
 }
 
-/// Fetch progress for tracking SSE-like updates
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct FetchProgress {
-    pub fetch_id: String,
-    pub total_stories: usize,
-    pub stories_added: usize,
-    pub summaries_done: usize,
-    pub summaries_error: usize,
-    pub finished: bool,
-    pub stories: Vec<Story>,
+/// Fetch event for SSE push updates
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FetchEvent {
+    /// A story has been saved to DB
+    StoryAdded { hn_id: i64 },
+    /// A summary has been generated
+    SummaryDone { hn_id: i64 },
+    /// A summary generation failed
+    SummaryError { hn_id: i64 },
+    /// All fetch and summary work is complete
+    Finished { total: usize, summaries: usize, errors: usize },
 }
 
 /// Config response for the settings modal

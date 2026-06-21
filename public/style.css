@@ -185,6 +185,18 @@ body {
     color: var(--text-secondary);
 }
 
+.story.clicked {
+    opacity: 0.55;
+}
+
+.story.clicked .story-summary {
+    color: var(--text-muted);
+}
+
+.story.clicked .story-meta {
+    opacity: 0.7;
+}
+
 .mark-read-btn {
     background: var(--bg-tertiary);
     border: none;
