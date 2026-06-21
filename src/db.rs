@@ -1,356 +1,280 @@
-use anyhow::Result;
-use blake3::Hash;
-use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Row, SqlitePool};
-use std::collections::HashSet;
+use std::sync::Arc;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Episode {
-    pub id: i64,
-    pub date: String,
-    pub created_at: String,
-    pub updated_at: String,
+use sled::Db;
+use tracing::{debug, info};
+
+use crate::error::AppError;
+use crate::models::{Episode, EpisodeWithStories, Story};
+
+/// Key prefix for episodes tree
+const EPISODES_TREE: &str = "episodes";
+/// Key prefix for stories tree
+const STORIES_TREE: &str = "stories";
+/// Key prefix for URL hashes tree (dedup)
+const URL_HASHES_TREE: &str = "url_hashes";
+
+/// Initialize sled database trees
+pub fn init_trees(db: &Db) -> Result<(), AppError> {
+    // Open trees to ensure they exist
+    db.open_tree(EPISODES_TREE)?;
+    db.open_tree(STORIES_TREE)?;
+    db.open_tree(URL_HASHES_TREE)?;
+    db.flush()?;
+    Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Story {
-    pub id: i64,
-    pub episode_id: i64,
-    pub hn_id: i64,
-    pub title: String,
-    pub url: Option<String>,
-    pub by: String,
-    pub score: i64,
-    pub time: i64,
-    pub summary: Option<String>,
-    pub summary_zh: Option<String>,
-    pub fetched_at: String,
-    pub tag: String,
+// ── Episode operations ──────────────────────────────────────────────
+
+/// Create a new episode for the given date, or return existing one
+pub fn create_episode(db: &Arc<Db>, date: &str) -> Result<Episode, AppError> {
+    let tree = db.open_tree(EPISODES_TREE)?;
+
+    if let Some(data) = tree.get(date)? {
+        let episode: Episode = serde_json::from_slice(&data)?;
+        debug!("Episode already exists for date: {}", date);
+        return Ok(episode);
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let episode = Episode {
+        date: date.to_string(),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    let data = serde_json::to_vec(&episode)?;
+    tree.insert(date, data.as_slice())?;
+    tree.flush()?;
+
+    info!("Created episode for date: {}", date);
+    Ok(episode)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HnStory {
-    pub id: i64,
-    pub title: String,
-    pub url: Option<String>,
-    pub by: String,
-    pub score: i64,
-    pub time: i64,
-    pub tag: String,
-}
+/// Get an episode by date
+pub fn get_episode_by_date(db: &Arc<Db>, date: &str) -> Result<Option<Episode>, AppError> {
+    let tree = db.open_tree(EPISODES_TREE)?;
 
-impl From<HnStory> for Story {
-    fn from(hn: HnStory) -> Self {
-        let now = chrono::Utc::now().to_rfc3339();
-        Self {
-            id: 0,
-            episode_id: 0,
-            hn_id: hn.id,
-            title: hn.title,
-            url: hn.url,
-            by: hn.by,
-            score: hn.score,
-            time: hn.time,
-            summary: None,
-            summary_zh: None,
-            fetched_at: now,
-            tag: hn.tag,
-        }
+    if let Some(data) = tree.get(date)? {
+        let episode: Episode = serde_json::from_slice(&data)?;
+        Ok(Some(episode))
+    } else {
+        Ok(None)
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EpisodeWithStories {
-    pub episode: Episode,
-    pub stories: Vec<Story>,
+/// Get the latest episode
+pub fn get_latest_episode(db: &Arc<Db>) -> Result<Option<Episode>, AppError> {
+    let tree = db.open_tree(EPISODES_TREE)?;
+
+    let mut latest: Option<Episode> = None;
+    for item in tree.iter().rev() {
+        let (_, data) = item?;
+        let episode: Episode = serde_json::from_slice(&data)?;
+        latest = Some(episode);
+        break;
+    }
+
+    Ok(latest)
 }
 
-pub async fn init_db(pool: &SqlitePool) -> Result<()> {
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS episodes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL UNIQUE,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
+/// Get all episodes sorted by date (newest first)
+pub fn get_episodes(db: &Arc<Db>) -> Result<Vec<Episode>, AppError> {
+    let tree = db.open_tree(EPISODES_TREE)?;
 
-        CREATE TABLE IF NOT EXISTS stories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            episode_id INTEGER NOT NULL,
-            hn_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            url TEXT,
-            by TEXT NOT NULL,
-            score INTEGER NOT NULL,
-            time INTEGER NOT NULL,
-            summary TEXT,
-            summary_zh TEXT,
-            fetched_at TEXT NOT NULL,
-            tag TEXT NOT NULL DEFAULT 'top',
-            FOREIGN KEY (episode_id) REFERENCES episodes(id)
-        );
+    let mut episodes: Vec<Episode> = Vec::new();
+    for item in tree.iter() {
+        let (_, data) = item?;
+        let episode: Episode = serde_json::from_slice(&data)?;
+        episodes.push(episode);
+    }
 
-        CREATE TABLE IF NOT EXISTS url_hashes (
-            url_hash TEXT PRIMARY KEY,
-            hn_id INTEGER NOT NULL,
-            first_seen_at TEXT NOT NULL
-        );
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn create_episode(pool: &SqlitePool, date: &str) -> Result<i64> {
-    let now = chrono::Utc::now().to_rfc3339();
-    let result = sqlx::query(
-        r#"
-        INSERT INTO episodes (date, created_at, updated_at)
-        VALUES (?1, ?2, ?2)
-        ON CONFLICT(date) DO UPDATE SET updated_at = ?2
-        RETURNING id
-        "#,
-    )
-    .bind(date)
-    .bind(&now)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(result.get::<i64, _>(0))
-}
-
-pub async fn get_episode_by_date(pool: &SqlitePool, date: &str) -> Result<Option<Episode>> {
-    let episode = sqlx::query_as::<_, Episode>(
-        "SELECT id, date, created_at, updated_at FROM episodes WHERE date = ?1",
-    )
-    .bind(date)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(episode)
-}
-
-pub async fn get_latest_episode(pool: &SqlitePool) -> Result<Option<Episode>> {
-    let episode = sqlx::query_as::<_, Episode>(
-        "SELECT id, date, created_at, updated_at FROM episodes ORDER BY date DESC LIMIT 1",
-    )
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(episode)
-}
-
-pub async fn get_episodes(pool: &SqlitePool) -> Result<Vec<Episode>> {
-    let episodes = sqlx::query_as::<_, Episode>(
-        "SELECT id, date, created_at, updated_at FROM episodes ORDER BY date DESC",
-    )
-    .fetch_all(pool)
-    .await?;
-
+    // Sort by date descending
+    episodes.sort_by(|a, b| b.date.cmp(&a.date));
     Ok(episodes)
 }
 
-pub async fn save_story(pool: &SqlitePool, story: &Story) -> Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        r#"
-        INSERT INTO stories (episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-        "#,
-    )
-    .bind(story.episode_id)
-    .bind(story.hn_id)
-    .bind(&story.title)
-    .bind(&story.url)
-    .bind(&story.by)
-    .bind(story.score)
-    .bind(story.time)
-    .bind(&story.summary)
-    .bind(&story.summary_zh)
-    .bind(&now)
-    .bind(&story.tag)
-    .execute(pool)
-    .await?;
+// ── Story operations ────────────────────────────────────────────────
 
+/// Generate a composite key for a story in the stories tree
+fn story_key(episode_date: &str, hn_id: i64) -> String {
+    format!("{}:{}", episode_date, hn_id)
+}
+
+/// Save a story to the database
+pub fn save_story(db: &Arc<Db>, story: &Story) -> Result<(), AppError> {
+    let tree = db.open_tree(STORIES_TREE)?;
+    let key = story_key(&story.episode_date, story.hn_id);
+    let data = serde_json::to_vec(story)?;
+    tree.insert(key.as_bytes(), data.as_slice())?;
+    tree.flush()?;
+
+    debug!("Saved story: {} (hn_id={})", story.title, story.hn_id);
     Ok(())
 }
 
-pub async fn get_stories_by_episode(pool: &SqlitePool, episode_id: i64) -> Result<Vec<Story>> {
-    let stories = sqlx::query_as::<_, Story>(
-        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag FROM stories WHERE episode_id = ?1 ORDER BY score DESC",
-    )
-    .bind(episode_id)
-    .fetch_all(pool)
-    .await?;
+/// Get all stories for an episode
+pub fn get_stories_by_episode(db: &Arc<Db>, episode_date: &str) -> Result<Vec<Story>, AppError> {
+    let tree = db.open_tree(STORIES_TREE)?;
+    let prefix = format!("{}:", episode_date);
 
+    let mut stories: Vec<Story> = Vec::new();
+    for item in tree.scan_prefix(prefix.as_bytes()) {
+        let (_, data) = item?;
+        let story: Story = serde_json::from_slice(&data)?;
+        stories.push(story);
+    }
+
+    // Sort by score descending
+    stories.sort_by(|a, b| b.score.cmp(&a.score));
     Ok(stories)
 }
 
-pub async fn get_all_stories(pool: &SqlitePool) -> Result<Vec<Story>> {
-    let stories = sqlx::query_as::<_, Story>(
-        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag FROM stories ORDER BY fetched_at DESC",
-    )
-    .fetch_all(pool)
-    .await?;
+/// Get a story by hn_id
+pub fn get_story_by_hn_id(db: &Arc<Db>, hn_id: i64) -> Result<Option<Story>, AppError> {
+    let tree = db.open_tree(STORIES_TREE)?;
 
-    Ok(stories)
+    // Scan all stories to find by hn_id
+    for item in tree.iter() {
+        let (_, data) = item?;
+        let story: Story = serde_json::from_slice(&data)?;
+        if story.hn_id == hn_id {
+            return Ok(Some(story));
+        }
+    }
+
+    Ok(None)
 }
 
-pub async fn get_story_by_hn_id(pool: &SqlitePool, hn_id: i64) -> Result<Option<Story>> {
-    let story = sqlx::query_as::<_, Story>(
-        "SELECT id, episode_id, hn_id, title, url, by, score, time, summary, summary_zh, fetched_at, tag FROM stories WHERE hn_id = ?1",
-    )
-    .bind(hn_id)
-    .fetch_optional(pool)
-    .await?;
+/// Update a story's summary
+pub fn update_story_summary(
+    db: &Arc<Db>,
+    episode_date: &str,
+    hn_id: i64,
+    summary: Option<&str>,
+    summary_zh: Option<&str>,
+) -> Result<Story, AppError> {
+    let tree = db.open_tree(STORIES_TREE)?;
+    let key = story_key(episode_date, hn_id);
+
+    let mut story: Story = if let Some(data) = tree.get(&key)? {
+        serde_json::from_slice(&data)?
+    } else {
+        return Err(AppError::NotFound(format!(
+            "Story not found: hn_id={}",
+            hn_id
+        )));
+    };
+
+    if let Some(s) = summary {
+        story.summary = Some(s.to_string());
+    }
+    if let Some(s) = summary_zh {
+        story.summary_zh = Some(s.to_string());
+    }
+
+    let data = serde_json::to_vec(&story)?;
+    tree.insert(key.as_bytes(), data.as_slice())?;
+    tree.flush()?;
 
     Ok(story)
 }
 
-pub async fn update_story_summary_by_lang(
-    pool: &SqlitePool,
-    story_id: i64,
-    lang: &str,
-    summary: &str,
-) -> Result<()> {
-    if lang == "en" {
-        sqlx::query(
-            r#"
-            UPDATE stories SET summary = ?1, fetched_at = datetime('now')
-            WHERE id = ?2
-            "#,
-        )
-        .bind(summary)
-        .bind(story_id)
-        .execute(pool)
-        .await?;
-    } else {
-        sqlx::query(
-            r#"
-            UPDATE stories SET summary_zh = ?1, fetched_at = datetime('now')
-            WHERE id = ?2
-            "#,
-        )
-        .bind(summary)
-        .bind(story_id)
-        .execute(pool)
-        .await?;
+/// Delete all stories
+pub fn delete_all_stories(db: &Arc<Db>) -> Result<usize, AppError> {
+    let tree = db.open_tree(STORIES_TREE)?;
+    let count = tree.len();
+    tree.clear()?;
+    tree.flush()?;
+
+    // Also clear URL hashes
+    let url_tree = db.open_tree(URL_HASHES_TREE)?;
+    url_tree.clear()?;
+    url_tree.flush()?;
+
+    info!("Deleted all {} stories", count);
+    Ok(count)
+}
+
+/// Delete stories by their hn_ids
+pub fn delete_stories_by_hn_ids(db: &Arc<Db>, hn_ids: &[i64]) -> Result<usize, AppError> {
+    let tree = db.open_tree(STORIES_TREE)?;
+    let hn_id_set: std::collections::HashSet<i64> = hn_ids.iter().copied().collect();
+
+    let mut deleted = 0;
+    let mut keys_to_delete: Vec<Vec<u8>> = Vec::new();
+
+    for item in tree.iter() {
+        let (key, data) = item?;
+        let story: Story = serde_json::from_slice(&data)?;
+        if hn_id_set.contains(&story.hn_id) {
+            keys_to_delete.push(key.to_vec());
+            deleted += 1;
+        }
     }
 
-    Ok(())
+    for key in keys_to_delete {
+        tree.remove(&key)?;
+    }
+    tree.flush()?;
+
+    info!("Deleted {} stories by hn_ids", deleted);
+    Ok(deleted)
 }
 
-pub async fn update_story_summary(
-    pool: &SqlitePool,
-    story_id: i64,
-    summary: Option<&str>,
-    summary_zh: Option<&str>,
-) -> Result<()> {
-    sqlx::query(
-        r#"
-        UPDATE stories SET summary = ?1, summary_zh = ?2, fetched_at = datetime('now')
-        WHERE id = ?3
-        "#,
-    )
-    .bind(summary)
-    .bind(summary_zh)
-    .bind(story_id)
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn delete_all_stories(pool: &SqlitePool) -> Result<usize> {
-    let result = sqlx::query("DELETE FROM stories").execute(pool).await?;
-    sqlx::query("DELETE FROM episodes").execute(pool).await?;
-    sqlx::query("DELETE FROM url_hashes").execute(pool).await?;
-
-    Ok(result.rows_affected() as usize)
-}
-
-pub async fn delete_episode_by_date(pool: &SqlitePool, date: &str) -> Result<usize> {
-    let episode = get_episode_by_date(pool, date).await?;
+/// Get an episode with its stories
+pub fn get_episode_with_stories(db: &Arc<Db>, date: &str) -> Result<Option<EpisodeWithStories>, AppError> {
+    let episode = get_episode_by_date(db, date)?;
 
     match episode {
-        Some(ep) => {
-            let stories_result = sqlx::query("DELETE FROM stories WHERE episode_id = ?1")
-                .bind(ep.id)
-                .execute(pool)
-                .await?;
+        Some(episode) => {
+            let stories = get_stories_by_episode(db, date)?;
+            // Deduplicate stories by hn_id
+            let mut seen = std::collections::HashSet::new();
+            let stories = stories
+                .into_iter()
+                .filter(|s| {
+                    let key = if s.hn_id != 0 {
+                        format!("hn:{}", s.hn_id)
+                    } else {
+                        format!("url:{}", s.url.as_deref().unwrap_or(&s.title))
+                    };
+                    if seen.contains(&key) {
+                        false
+                    } else {
+                        seen.insert(key);
+                        true
+                    }
+                })
+                .collect();
 
-            sqlx::query("DELETE FROM episodes WHERE id = ?1")
-                .bind(ep.id)
-                .execute(pool)
-                .await?;
-
-            Ok(stories_result.rows_affected() as usize)
+            Ok(Some(EpisodeWithStories { episode, stories }))
         }
-        None => Ok(0),
+        None => Ok(None),
     }
 }
 
-pub async fn delete_stories_by_episode(pool: &SqlitePool, episode_id: i64) -> Result<usize> {
-    let result = sqlx::query("DELETE FROM stories WHERE episode_id = ?1")
-        .bind(episode_id)
-        .execute(pool)
-        .await?;
+// ── URL hash operations ─────────────────────────────────────────────
 
-    Ok(result.rows_affected() as usize)
+/// Check if a URL has already been fetched
+pub fn is_url_seen(db: &Arc<Db>, url: &str) -> Result<bool, AppError> {
+    let tree = db.open_tree(URL_HASHES_TREE)?;
+    let hash = blake3_hash(url);
+    Ok(tree.contains_key(&hash)?)
 }
 
-pub async fn delete_stories_by_hn_ids(pool: &SqlitePool, hn_ids: &[i64]) -> Result<usize> {
-    if hn_ids.is_empty() {
-        return Ok(0);
-    }
-
-    let placeholders: Vec<String> = hn_ids.iter().map(|_| "?".to_string()).collect();
-    let query = format!(
-        "DELETE FROM stories WHERE hn_id IN ({})",
-        placeholders.join(",")
-    );
-
-    let mut query_builder = sqlx::query(&query);
-    for hn_id in hn_ids {
-        query_builder = query_builder.bind(hn_id);
-    }
-
-    let result = query_builder.execute(pool).await?;
-
-    Ok(result.rows_affected() as usize)
-}
-
-pub fn compute_dedup_hash(url: Option<&str>, title: &str) -> String {
-    let content = url.unwrap_or(title);
-    Hash::from(blake3::hash(content.as_bytes()))
-        .to_hex()
-        .to_string()
-}
-
-pub async fn get_existing_url_hashes(pool: &SqlitePool) -> Result<HashSet<String>> {
-    let rows: Vec<(String,)> = sqlx::query_as("SELECT url_hash FROM url_hashes")
-        .fetch_all(pool)
-        .await?;
-
-    Ok(rows.into_iter().map(|(hash,)| hash).collect())
-}
-
-pub async fn insert_url_hash(pool: &SqlitePool, url_hash: &str, hn_id: i64) -> Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        r#"
-        INSERT OR IGNORE INTO url_hashes (url_hash, hn_id, first_seen_at)
-        VALUES (?1, ?2, ?3)
-        "#,
-    )
-    .bind(url_hash)
-    .bind(hn_id)
-    .bind(&now)
-    .execute(pool)
-    .await?;
-
+/// Mark a URL as seen
+pub fn mark_url_seen(db: &Arc<Db>, url: &str) -> Result<(), AppError> {
+    let tree = db.open_tree(URL_HASHES_TREE)?;
+    let hash = blake3_hash(url);
+    tree.insert(&hash, b"1")?;
+    tree.flush()?;
     Ok(())
+}
+
+/// Simple hash function for URLs
+pub fn blake3_hash(url: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    url.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }

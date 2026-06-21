@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Clone, Debug)]
-pub struct HistoryChat {
+pub(crate) struct HistoryChat {
     pub utext: String,
     pub btext: String,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
-pub struct APIConfig {
+pub(crate) struct APIConfig {
     pub api_base_url: String,
     pub api_model: String,
     pub api_key: String,

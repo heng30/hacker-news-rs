@@ -1,16 +1,16 @@
-use crate::{Result, request, response};
+use crate::bot::{Error, request, response};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, HeaderMap};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 
 #[derive(Debug)]
-pub struct ChatConfig {
+pub(crate) struct ChatConfig {
     pub tx: mpsc::Sender<response::StreamTextItem>,
 }
 
 #[derive(Debug)]
-pub struct Chat {
+pub(crate) struct Chat {
     pub config: request::APIConfig,
     messages: Vec<request::Message>,
     chat_tx: mpsc::Sender<response::StreamTextItem>,
@@ -68,7 +68,7 @@ impl Chat {
         headers
     }
 
-    pub async fn start(self) -> Result<()> {
+    pub async fn start(self) -> Result<(), Error> {
         let mut client_builder = reqwest::Client::builder();
 
         if let Some(ref ua) = self.config.user_agent {
@@ -138,7 +138,7 @@ impl Chat {
 async fn handle_stream_response(
     response: reqwest::Response,
     chat_tx: mpsc::Sender<response::StreamTextItem>,
-) -> Result<()> {
+) -> Result<(), Error> {
     let mut stream = response.bytes_stream();
     let mut buffer = String::new();
 
@@ -239,7 +239,7 @@ async fn handle_stream_response(
 async fn handle_non_stream_response(
     response: reqwest::Response,
     chat_tx: mpsc::Sender<response::StreamTextItem>,
-) -> Result<()> {
+) -> Result<(), Error> {
     let body = response.text().await?;
 
     match serde_json::from_str::<response::ChatCompletionResponse>(&body) {

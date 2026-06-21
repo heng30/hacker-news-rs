@@ -2,9 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Default, Clone, Debug)]
-pub struct StreamTextItem {
+pub(crate) struct StreamTextItem {
+    #[allow(dead_code)]
     pub id: u64,
     pub text: Option<String>,
+    #[allow(dead_code)]
     pub reasoning_text: Option<String>,
     pub etext: Option<String>,
     pub finished: bool,
