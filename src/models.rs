@@ -20,7 +20,6 @@ pub struct Story {
     pub score: i64,
     pub time: i64,
     pub summary: Option<String>,
-    pub summary_zh: Option<String>,
     pub fetched_at: String,
     pub tag: String,
 }
@@ -50,7 +49,6 @@ impl From<HnStory> for Story {
             score: hn.score,
             time: hn.time,
             summary: None,
-            summary_zh: None,
             fetched_at: now,
             tag: hn.tag,
         }

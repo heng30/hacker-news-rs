@@ -15,8 +15,6 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
     /// HTTP client (with optional SOCKS5 proxy)
     pub http_client: reqwest::Client,
-    /// Current language (shared across requests)
-    pub lang: Arc<tokio::sync::RwLock<String>>,
     /// Active fetch progress tracking
     pub fetch_progress: Arc<DashMap<String, FetchProgress>>,
 }

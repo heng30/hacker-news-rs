@@ -9,7 +9,6 @@ use crate::components::settings::SettingsModal;
 use crate::components::story_card::StoryCard;
 use crate::components::toast::Toast;
 use crate::models::Story;
-use crate::server_fns::config::set_lang;
 use crate::server_fns::episodes::{
     get_episode_by_date, get_episodes, get_latest_episode,
 };
@@ -19,10 +18,26 @@ use crate::server_fns::stories::regenerate_summary;
 /// Main home page component
 #[component]
 pub fn HomePage() -> impl IntoView {
-    // Theme state
-    let (is_dark, set_is_dark) = signal(false);
-    // Language state
-    let (lang, set_lang_signal) = signal("en".to_string());
+    // Theme state — persist in localStorage (only on client)
+    let initial_dark = if !leptos::prelude::is_server() {
+        leptos::prelude::window()
+            .local_storage()
+            .ok()
+            .flatten()
+            .and_then(|ls| ls.get_item("hns-theme").ok().flatten())
+            .map(|v| v == "dark")
+            .unwrap_or(false)
+    } else {
+        false
+    };
+    let (is_dark, set_is_dark) = signal(initial_dark);
+
+    // Apply theme on mount (client only)
+    if initial_dark {
+        if let Some(html) = document().document_element() {
+            let _ = html.set_attribute("data-theme", "dark");
+        }
+    }
     // Show only unread stories
     let (show_only_unread, set_show_only_unread) = signal(false);
     // Currently selected date
@@ -68,25 +83,19 @@ pub fn HomePage() -> impl IntoView {
         );
     };
 
-    // Theme toggle
+    // Theme toggle — persist to localStorage (client only)
     let toggle_theme = move || {
         let new_dark = !is_dark.get();
         set_is_dark.set(new_dark);
-        let doc = document();
-        if let Some(html) = doc.document_element() {
-            let _ = html.set_attribute("data-theme", if new_dark { "dark" } else { "light" });
+        let theme = if new_dark { "dark" } else { "light" };
+        if !leptos::prelude::is_server() {
+            if let Some(html) = document().document_element() {
+                let _ = html.set_attribute("data-theme", theme);
+            }
+            if let Some(ls) = leptos::prelude::window().local_storage().ok().flatten() {
+                let _ = ls.set_item("hns-theme", theme);
+            }
         }
-    };
-
-    // Language toggle
-    let toggle_lang = move || {
-        let new_lang = if lang.get() == "en" { "zh" } else { "en" };
-        let new_lang = new_lang.to_string();
-        set_lang_signal.set(new_lang.clone());
-        let lang_clone = new_lang.clone();
-        spawn_local(async move {
-            let _ = set_lang(lang_clone).await;
-        });
     };
 
     // Refresh / fetch stories
@@ -96,15 +105,13 @@ pub fn HomePage() -> impl IntoView {
         }
         set_is_fetching.set(true);
         show_toast(
-            "Fetching stories from Hacker News...".to_string(),
+            "正在从 Hacker News 获取故事...".to_string(),
             "loading".to_string(),
         );
 
-        let lang_val = lang.get();
         spawn_local(async move {
-            match start_fetch(lang_val).await {
+            match start_fetch().await {
                 Ok(fetch_id) => {
-                    // Start polling for status using set_timeout (cross-platform)
                     poll_fetch_status(
                         fetch_id,
                         set_is_fetching,
@@ -115,7 +122,7 @@ pub fn HomePage() -> impl IntoView {
                 }
                 Err(e) => {
                     set_is_fetching.set(false);
-                    show_toast(format!("Error: {}", e), "error".to_string());
+                    show_toast(format!("错误: {}", e), "error".to_string());
                 }
             }
         });
@@ -130,14 +137,13 @@ pub fn HomePage() -> impl IntoView {
 
     // Regenerate summary
     let do_regenerate = move |hn_id: i64| {
-        let lang_val = lang.get();
         spawn_local(async move {
-            match regenerate_summary(hn_id, lang_val).await {
+            match regenerate_summary(hn_id).await {
                 Ok(_) => {
                     episode_resource.refetch();
                 }
                 Err(e) => {
-                    show_toast(format!("Error: {}", e), "error".to_string());
+                    show_toast(format!("错误: {}", e), "error".to_string());
                 }
             }
         });
@@ -189,10 +195,8 @@ pub fn HomePage() -> impl IntoView {
             on_refresh=Callback::new(move |_| do_fetch())
             on_toggle_read=Callback::new(move |_| set_show_only_unread.update(|v| *v = !*v))
             on_calendar=Callback::new(move |_| set_calendar_open.set(true))
-            on_toggle_lang=Callback::new(move |_| toggle_lang())
             on_toggle_theme=Callback::new(move |_| toggle_theme())
             on_settings=Callback::new(move |_| set_settings_open.set(true))
-            lang=lang
             is_dark=is_dark
         />
 
@@ -202,13 +206,12 @@ pub fn HomePage() -> impl IntoView {
                     <Suspense fallback=|| view! {
                         <div class="empty-state">
                             <div class="loading-spinner"></div>
-                            <p>"Loading..."</p>
+                            <p>"加载中..."</p>
                         </div>
                     }>
                         {move || {
                             let stories = display_stories();
                             let reads = read_stories.get();
-                            let lang_val = lang.get();
 
                             if stories.is_empty() {
                                 view! {
@@ -217,8 +220,8 @@ pub fn HomePage() -> impl IntoView {
                                             <path d="M4 4h16v16H4z" />
                                             <path d="M9 9h6M9 12h6M9 15h4" />
                                         </svg>
-                                        <p>"No episode loaded"</p>
-                                        <p style="font-size: 13px; margin-top: 8px">"Click refresh button or select a date from the calendar"</p>
+                                        <p>"暂无内容"</p>
+                                        <p style="font-size: 13px; margin-top: 8px">"点击刷新按钮或从日历选择日期"</p>
                                     </div>
                                 }.into_any()
                             } else {
@@ -228,14 +231,12 @@ pub fn HomePage() -> impl IntoView {
                                         key=|s: &Story| s.hn_id
                                         children=move |story: Story| {
                                             let is_read = reads.contains(&story.hn_id);
-                                            let lang_clone = lang_val.clone();
-                                            let idx = 0; // index not available in Leptos 0.8 For
+                                            let idx = 0;
                                             view! {
                                                 <StoryCard
                                                     story=story
                                                     index=idx
                                                     is_read=is_read
-                                                    lang=lang_clone
                                                     on_mark_read=Callback::new(move |id| mark_read(id))
                                                     on_regenerate=Callback::new(move |id| do_regenerate(id))
                                                 />
@@ -292,13 +293,12 @@ fn poll_fetch_status(
                 if progress.finished {
                     set_is_fetching.set(false);
                     show_toast(
-                        format!("Fetched {} stories", progress.summaries_done),
+                        format!("已获取 {} 篇故事", progress.summaries_done),
                         "success".to_string(),
                     );
                     episode_resource.refetch();
                     episodes_resource.refetch();
                 } else {
-                    // Continue polling after 2 seconds
                     set_timeout(
                         move || {
                             poll_fetch_status(

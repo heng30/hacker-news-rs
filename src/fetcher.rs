@@ -1,5 +1,6 @@
 use anyhow::Result;
 use scraper::Html;
+use std::time::Duration;
 
 pub const USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0";
@@ -13,10 +14,15 @@ const SKIP_TAGS: &[&str] = &[
 pub async fn fetch_url_content(
     url: &str,
     client: &reqwest::Client,
-    _fetch_html_timeout: u32,
+    fetch_html_timeout: u32,
     max_content_length: u32,
 ) -> Result<Option<String>> {
-    let response = match client.get(url).send().await {
+    let response = match client
+        .get(url)
+        .timeout(Duration::from_secs(fetch_html_timeout as u64))
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!("Failed to fetch URL {}: {}", url, e);

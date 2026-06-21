@@ -13,7 +13,7 @@ fn app_state() -> Result<std::sync::Arc<AppState>, ServerFnError> {
 }
 
 #[server]
-pub async fn regenerate_summary(hn_id: i64, lang: String) -> Result<Story, ServerFnError> {
+pub async fn regenerate_summary(hn_id: i64) -> Result<Story, ServerFnError> {
     let state = app_state()?;
 
     if state.config.api_key.is_empty() {
@@ -24,11 +24,11 @@ pub async fn regenerate_summary(hn_id: i64, lang: String) -> Result<Story, Serve
         .map_err(|e| ServerFnError::new(e.to_string()))?
         .ok_or_else(|| ServerFnError::new("Story not found"))?;
 
-    let llm_client = crate::llm::LlmClient::new(&state.config, state.http_client.clone());
+    let llm_client = crate::llm::LlmClient::new(state.config.clone(), state.http_client.clone());
 
-    tracing::info!("Regenerating summaries for story {}: {}", story.hn_id, story.title);
-    let (summary, summary_zh) = llm_client
-        .summarize(&story.title, story.url.as_deref(), &lang)
+    tracing::info!("Regenerating summary for story {}: {}", story.hn_id, story.title);
+    let summary = llm_client
+        .summarize(&story.title, story.url.as_deref())
         .await
         .map_err(|e| ServerFnError::new(format!("Failed to regenerate summary: {e}")))?;
 
@@ -37,7 +37,6 @@ pub async fn regenerate_summary(hn_id: i64, lang: String) -> Result<Story, Serve
         &story.episode_date,
         story.hn_id,
         summary.as_deref(),
-        summary_zh.as_deref(),
     )
     .map_err(|e| ServerFnError::new(e.to_string()))?;
 

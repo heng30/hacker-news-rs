@@ -8,10 +8,8 @@ pub fn Navbar(
     on_refresh: Callback<()>,
     on_toggle_read: Callback<()>,
     on_calendar: Callback<()>,
-    on_toggle_lang: Callback<()>,
     on_toggle_theme: Callback<()>,
     on_settings: Callback<()>,
-    lang: ReadSignal<String>,
     is_dark: ReadSignal<bool>,
 ) -> impl IntoView {
     let refresh_class = move || {
@@ -36,7 +34,7 @@ pub fn Navbar(
             <div class="navbar-right">
                 <button
                     class=refresh_class
-                    title="Refresh stories"
+                    title="刷新故事"
                     on:click=move |_| on_refresh.run(())
                     disabled=move || is_fetching.get()
                 >
@@ -48,10 +46,9 @@ pub fn Navbar(
 
                 <button
                     class="icon-btn"
-                    title=move || if show_only_unread.get() { "Show all stories" } else { "Show only unread" }
+                    title=move || if show_only_unread.get() { "显示全部" } else { "仅显示未读" }
                     on:click=move |_| on_toggle_read.run(())
                 >
-                    // Show book icon when showing all, eye icon when showing only unread
                     <Show
                         when=move || !show_only_unread.get()
                         fallback=move || view! {
@@ -69,7 +66,7 @@ pub fn Navbar(
                     </Show>
                 </button>
 
-                <button class="icon-btn" title="Calendar" on:click=move |_| on_calendar.run(())>
+                <button class="icon-btn" title="日历" on:click=move |_| on_calendar.run(())>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                         <line x1="16" y1="2" x2="16" y2="6" />
@@ -78,22 +75,7 @@ pub fn Navbar(
                     </svg>
                 </button>
 
-                <button class="icon-btn" title="Toggle language" on:click=move |_| on_toggle_lang.run(())>
-                    <Show
-                        when=move || lang.get() == "en"
-                        fallback=move || view! {
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <text x="12" y="17" font-size="18" font-family="Arial, sans-serif" font-weight="bold" fill="currentColor" stroke="none" text-anchor="middle">"中"</text>
-                            </svg>
-                        }
-                    >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <text x="12" y="17" font-size="18" font-family="Arial, sans-serif" font-weight="bold" fill="currentColor" stroke="none" text-anchor="middle">"EN"</text>
-                        </svg>
-                    </Show>
-                </button>
-
-                <button class="icon-btn" title="Toggle theme" on:click=move |_| on_toggle_theme.run(())>
+                <button class="icon-btn" title="切换主题" on:click=move |_| on_toggle_theme.run(())>
                     <Show
                         when=move || !is_dark.get()
                         fallback=move || view! {
@@ -109,7 +91,7 @@ pub fn Navbar(
                     </Show>
                 </button>
 
-                <button class="icon-btn" title="Settings" on:click=move |_| on_settings.run(())>
+                <button class="icon-btn" title="设置" on:click=move |_| on_settings.run(())>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3" />
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />

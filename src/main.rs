@@ -13,19 +13,17 @@ use axum::routing::post;
 #[cfg(feature = "ssr")]
 use clap::Parser;
 #[cfg(feature = "ssr")]
-use hacker_news_rs::config::AppConfig;
+use hns::config::AppConfig;
 #[cfg(feature = "ssr")]
-use hacker_news_rs::config::Args;
+use hns::config::Args;
 #[cfg(feature = "ssr")]
-use hacker_news_rs::db;
+use hns::db;
 #[cfg(feature = "ssr")]
-use hacker_news_rs::state::AppState;
+use hns::state::AppState;
 #[cfg(feature = "ssr")]
 use leptos::{config::LeptosOptions, prelude::*};
 #[cfg(feature = "ssr")]
 use leptos_axum::{LeptosRoutes, generate_route_list};
-#[cfg(feature = "ssr")]
-use tokio::sync::RwLock;
 
 /// Wrapper state that holds both LeptosOptions and AppState
 #[cfg(feature = "ssr")]
@@ -69,7 +67,7 @@ async fn main() {
     ));
 
     // Resolve database path
-    let db_path = AppConfig::resolve_db_path(&args.db, "hacker-news-rs");
+    let db_path = AppConfig::resolve_db_path(&args.db, "hns");
 
     // Ensure database directory exists
     if let Some(parent) = std::path::Path::new(&db_path).parent() {
@@ -104,7 +102,7 @@ async fn main() {
 
     // Build HTTP client with optional SOCKS5 proxy
     let mut client_builder = reqwest::Client::builder()
-        .user_agent(hacker_news_rs::fetcher::USER_AGENT);
+        .user_agent(hns::fetcher::USER_AGENT);
 
     if let Some(proxy) = &config.socks5_proxy {
         let proxy_url = if proxy.starts_with("socks5://") || proxy.starts_with("socks5h://") {
@@ -125,7 +123,6 @@ async fn main() {
         db: Arc::new(sled_db),
         config: Arc::new(config.clone()),
         http_client: http_client.clone(),
-        lang: Arc::new(RwLock::new("zh".to_string())),
         fetch_progress: Arc::new(dashmap::DashMap::new()),
     });
 
@@ -145,8 +142,7 @@ async fn main() {
                 interval.tick().await;
                 tracing::info!("Auto-update triggered");
 
-                let lang = state.lang.read().await.clone();
-                match background_fetch(state.clone(), &lang).await {
+                match background_fetch(state.clone()).await {
                     Ok(count) => {
                         tracing::info!("Auto-update completed: {} stories processed", count)
                     }
@@ -158,7 +154,7 @@ async fn main() {
 
     let leptos_options = LeptosOptions::builder()
         .site_addr(addr)
-        .output_name("hacker-news-rs".to_string())
+        .output_name("hns".to_string())
         .site_root("target/site".to_string())
         .site_pkg_dir("pkg".to_string())
         .build();
@@ -168,16 +164,9 @@ async fn main() {
         app_state: app_state.clone(),
     };
 
-    let routes = generate_route_list(hacker_news_rs::app::App);
-
-    let pkg_dir = leptos_axum::site_pkg_dir_service(&leptos_options);
-    let pkg_path = leptos_axum::site_pkg_dir_service_route_path(&leptos_options);
+    let routes = generate_route_list(hns::app::App);
 
     let app = Router::new()
-        .route(
-            &pkg_path,
-            axum::routing::get_service(pkg_dir),
-        )
         .route(
             "/api/{*fn_name}",
             post({
@@ -204,10 +193,10 @@ async fn main() {
             },
             {
                 let leptos_options = leptos_options.clone();
-                move || hacker_news_rs::shell::shell(leptos_options.clone())
+                move || hns::shell::shell(leptos_options.clone())
             },
         )
-        .fallback(hacker_news_rs::static_files::static_handler)
+        .fallback(hns::static_files::static_handler)
         .with_state(wrapper);
 
     tracing::info!("Hacker News RS starting on http://{}", addr);
@@ -219,7 +208,7 @@ async fn main() {
 
 /// Background fetch for auto-update
 #[cfg(feature = "ssr")]
-async fn background_fetch(state: Arc<AppState>, lang: &str) -> anyhow::Result<usize> {
+async fn background_fetch(state: Arc<AppState>) -> anyhow::Result<usize> {
     if state.config.api_key.is_empty() {
         tracing::warn!("Auto-update skipped: API key not configured");
         return Ok(0);
@@ -228,13 +217,13 @@ async fn background_fetch(state: Arc<AppState>, lang: &str) -> anyhow::Result<us
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let _episode = db::create_episode(&state.db, &today)?;
 
-    let hn_client = hacker_news_rs::api::HnClient::new(state.http_client.clone());
+    let hn_client = hns::api::HnClient::new(state.http_client.clone());
     let top_ids = hn_client.fetch_top_stories().await?;
     let all_top_stories = hn_client.fetch_stories(&top_ids).await?;
 
     // Filter by score and dedup
     let min_score = state.config.top_story_min_score;
-    let stories: Vec<hacker_news_rs::models::HnStory> = all_top_stories
+    let stories: Vec<hns::models::HnStory> = all_top_stories
         .into_iter()
         .filter(|s| {
             let url_key = s.url.as_deref().unwrap_or(&s.title);
@@ -250,11 +239,11 @@ async fn background_fetch(state: Arc<AppState>, lang: &str) -> anyhow::Result<us
     }
 
     // Save and summarize
-    let llm_client = hacker_news_rs::llm::LlmClient::new(&state.config, state.http_client.clone());
-    let mut saved: Vec<hacker_news_rs::models::Story> = Vec::new();
+    let llm_client = hns::llm::LlmClient::new(state.config.clone(), state.http_client.clone());
+    let mut saved: Vec<hns::models::Story> = Vec::new();
 
     for hn_story in stories {
-        let mut story: hacker_news_rs::models::Story = hn_story.into();
+        let mut story: hns::models::Story = hn_story.into();
         story.episode_date = today.clone();
         db::save_story(&state.db, &story)?;
 
@@ -276,21 +265,19 @@ async fn background_fetch(state: Arc<AppState>, lang: &str) -> anyhow::Result<us
             .map(|story| {
                 let db = state.db.clone();
                 let llm = llm_client.clone();
-                let lang = lang.to_string();
                 let story_clone = story.clone();
 
                 async move {
                     match llm
-                        .summarize(&story_clone.title, story_clone.url.as_deref(), &lang)
+                        .summarize(&story_clone.title, story_clone.url.as_deref())
                         .await
                     {
-                        Ok((summary, summary_zh)) => {
+                        Ok(summary) => {
                             let _ = db::update_story_summary(
                                 &db,
                                 &story_clone.episode_date,
                                 story_clone.hn_id,
                                 summary.as_deref(),
-                                summary_zh.as_deref(),
                             );
                             true
                         }

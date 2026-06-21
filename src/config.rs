@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::env;
 
 use clap::Parser;
 
@@ -24,71 +23,51 @@ pub struct Args {
     pub api_key: Option<String>,
 
     /// OpenAI API base URL
-    #[arg(
-        long,
-        default_value = "https://api.deepseek.com/v1",
-        env = "HACKER_NEWS_OPENAI_BASE_URL"
-    )]
+    #[arg(long, default_value = "https://api.deepseek.com/v1")]
     pub api_base_url: String,
 
     /// LLM model name
-    #[arg(long, default_value = "deepseek-chat", env = "HACKER_NEWS_MODEL")]
+    #[arg(long, default_value = "deepseek-v4-flash")]
     pub model: String,
 
     /// SOCKS5 proxy URL (e.g. socks5://127.0.0.1:1080)
-    #[arg(long, env = "HACKER_NEWS_SOCKS5")]
+    #[arg(long)]
     pub socks5_proxy: Option<String>,
 
     /// Search keywords (comma-separated, e.g. "rust,linux")
-    #[arg(long, env = "HACKER_NEWS_SEARCH_KEYWORDS")]
+    #[arg(long)]
     pub search_keywords: Option<String>,
 
     /// Auto update interval in minutes (0 = disabled)
-    #[arg(
-        long,
-        default_value_t = 0,
-        env = "HACKER_NEWS_AUTO_UPDATE_INTERVAL"
-    )]
+    #[arg(long, default_value_t = 0)]
     pub auto_update_interval: u32,
 
     /// Minimum score for top stories
-    #[arg(
-        long,
-        default_value_t = 500,
-        env = "HACKER_NEWS_TOP_STORY_MIN_SCORE"
-    )]
+    #[arg(long, default_value_t = 500)]
     pub top_story_min_score: i64,
 
     /// Summary generation concurrency
-    #[arg(
-        long,
-        default_value_t = 3,
-        env = "HACKER_NEWS_SUMMARY_CONCURRENCY"
-    )]
+    #[arg(long, default_value_t = 3)]
     pub summary_concurrency: usize,
 
     /// Disable LLM streaming (use non-streaming API)
-    #[arg(long, env = "HACKER_NEWS_LLM_NO_STREAM")]
-    pub llm_no_stream: Option<bool>,
+    #[arg(long)]
+    pub llm_no_stream: bool,
 
     /// Custom User-Agent for LLM API requests
-    #[arg(long, env = "HACKER_NEWS_LLM_USER_AGENT")]
+    #[arg(long)]
     pub llm_user_agent: Option<String>,
 
     /// LLM request timeout in seconds
-    #[arg(long, default_value_t = 180, env = "HACKER_NEWS_LLM_TIMEOUT")]
+    #[arg(long, default_value_t = 180)]
     pub llm_timeout: u32,
 
     /// HTML fetch timeout in seconds
-    #[arg(long, default_value_t = 30, env = "HACKER_NEWS_FETCH_HTML_TIMEOUT")]
+    #[arg(long, default_value_t = 30)]
     pub fetch_html_timeout: u32,
 
     /// Maximum content length for text extraction
-    #[arg(
-        long,
-        default_value_t = 16000,
-        env = "HACKER_NEWS_MAX_CONTENT_LENGTH"
-    )]
+    #[arg(long, default_value_t = 16000)]
     pub max_content_length: u32,
 }
 
@@ -106,7 +85,7 @@ pub struct AppConfig {
     pub auto_update_interval: u32,
     pub top_story_min_score: i64,
     pub summary_concurrency: usize,
-    pub llm_no_stream: Option<bool>,
+    pub llm_no_stream: bool,
     pub llm_user_agent: Option<String>,
     pub llm_timeout: u32,
     pub fetch_html_timeout: u32,
@@ -155,26 +134,17 @@ impl AppConfig {
         }
     }
 
-    /// Resolve database path: use --db arg, or HACKER_NEWS_DATABASE_URL env, or platform default
+    /// Resolve database path: use --db arg, or platform default
     pub fn resolve_db_path(args_db: &Option<String>, app_name: &str) -> String {
-        // 1. CLI arg takes precedence
         if let Some(path) = args_db {
             return path.clone();
         }
 
-        // 2. Environment variable fallback
-        if let Ok(path) = env::var("HACKER_NEWS_DATABASE_URL") {
-            if !path.is_empty() {
-                return path;
-            }
-        }
-
-        // 3. Platform data directory
         let app_dirs =
             platform_dirs::AppDirs::new(Some(app_name), true).expect("Failed to resolve data dir");
         app_dirs
             .data_dir
-            .join("hacker_news_db")
+            .join("hns.db")
             .to_string_lossy()
             .to_string()
     }

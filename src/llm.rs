@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::sync::Arc;
 use crate::bot::{APIConfig, Chat, ChatConfig, StreamTextItem};
 use tokio::sync::mpsc;
 
@@ -6,48 +7,31 @@ use crate::config::AppConfig;
 
 #[derive(Clone)]
 pub struct LlmClient {
-    api_key: String,
-    base_url: String,
-    model: String,
-    no_stream: Option<bool>,
-    user_agent: Option<String>,
-    request_timeout: u32,
-    http_client: reqwest::Client,
-    fetch_html_timeout: u32,
-    max_content_length: u32,
+    config: Arc<AppConfig>,
+    fetch_client: reqwest::Client,
 }
 
 impl LlmClient {
-    pub fn new(config: &AppConfig, http_client: reqwest::Client) -> Self {
+    pub fn new(config: Arc<AppConfig>, fetch_client: reqwest::Client) -> Self {
         Self {
-            api_key: config.api_key.clone(),
-            base_url: config.api_base_url.clone(),
-            model: config.model.clone(),
-            no_stream: config.llm_no_stream,
-            user_agent: config.llm_user_agent.clone(),
-            request_timeout: config.llm_timeout,
-            http_client,
-            fetch_html_timeout: config.fetch_html_timeout,
-            max_content_length: config.max_content_length,
+            config,
+            fetch_client,
         }
     }
 
-    /// Generate summary based on language preference
-    /// lang = "en" -> generates English summary only
-    /// lang = "zh" -> generates Chinese summary only
+    /// Generate Chinese summary
     pub async fn summarize(
         &self,
         title: &str,
         url: Option<&str>,
-        lang: &str,
-    ) -> Result<(Option<String>, Option<String>)> {
+    ) -> Result<Option<String>> {
         let content = match url {
             Some(u) => {
                 crate::fetcher::fetch_url_content(
                     u,
-                    &self.http_client,
-                    self.fetch_html_timeout,
-                    self.max_content_length,
+                    &self.fetch_client,
+                    self.config.fetch_html_timeout,
+                    self.config.max_content_length,
                 )
                 .await?
             }
@@ -56,43 +40,31 @@ impl LlmClient {
 
         // Skip LLM call if content fetch failed
         if content.is_none() {
-            return Ok((None, None));
+            return Ok(None);
         }
 
         let context = format!("Title: {}\n\nContent:\n{}", title, content.unwrap());
 
-        if lang == "en" {
-            let prompt = "You are a helpful assistant that summarizes Hacker News stories in English. \
-                          Requirements: \
-                          1. MUST be between 200-300 words \
-                          2. Provide comprehensive context, technical details, and implications \
-                          3. Write in clear, professional English suitable for technical readers \
-                          Only output the summary, nothing else.";
+        let prompt = "你是一个帮助总结 Hacker News 故事的助手。\
+                      要求：\
+                      1. 必须在400-500个中文字符之间 \
+                      2. 提供全面的上下文、技术细节和影响 \
+                      3. 用清晰、专业的中文撰写，适合技术读者阅读 \
+                      只输出中文摘要，不要输出其他内容。";
 
-            let response = self.call_llm(prompt, &context).await?;
-            Ok((Some(response.trim().to_string()), None))
-        } else {
-            let prompt = "You are a helpful assistant that summarizes Hacker News stories in Chinese. \
-                          Requirements: \
-                          1. MUST be between 400-500 Chinese characters \
-                          2. Provide comprehensive context, technical details, and implications \
-                          3. Write in clear, professional Chinese suitable for technical readers \
-                          Only output the Chinese summary, nothing else.";
-
-            let response = self.call_llm(prompt, &context).await?;
-            Ok((None, Some(response.trim().to_string())))
-        }
+        let response = self.call_llm(prompt, &context).await?;
+        Ok(Some(response.trim().to_string()))
     }
 
     async fn call_llm(&self, prompt: &str, context: &str) -> Result<String> {
         let request_config = APIConfig {
-            api_base_url: self.base_url.clone(),
-            api_model: self.model.clone(),
-            api_key: self.api_key.clone(),
+            api_base_url: self.config.api_base_url.clone(),
+            api_model: self.config.model.clone(),
+            api_key: self.config.api_key.clone(),
             temperature: Some(0.7),
-            no_stream: self.no_stream,
-            user_agent: self.user_agent.clone(),
-            request_timeout: self.request_timeout,
+            no_stream: if self.config.llm_no_stream { Some(true) } else { None },
+            user_agent: self.config.llm_user_agent.clone(),
+            request_timeout: self.config.llm_timeout,
         };
 
         let (tx, mut rx) = mpsc::channel::<StreamTextItem>(100);

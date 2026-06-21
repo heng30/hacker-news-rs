@@ -30,12 +30,3 @@ pub async fn get_config() -> Result<ConfigResponse, ServerFnError> {
         summary_concurrency: state.config.summary_concurrency,
     })
 }
-
-#[server]
-pub async fn set_lang(lang: String) -> Result<String, ServerFnError> {
-    let state = app_state()?;
-    let mut current = state.lang.write().await;
-    *current = lang.clone();
-    tracing::info!("Language setting updated to: {}", lang);
-    Ok(lang)
-}

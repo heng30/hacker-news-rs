@@ -3,22 +3,19 @@
 all: build
 
 build:
-	cargo build --release
+	cargo leptos build --release
 
 build-debug:
-	cargo build
+	cargo leptos build
 
-build-static-linux:
-	CC_x86_64_unknown_linux_musl=x86_64-unknown-linux-musl-gcc cargo build --release --target x86_64-unknown-linux-musl
+build-static-linux: build
+	CC_x86_64_unknown_linux_musl=x86_64-unknown-linux-musl-gcc cargo build --release --no-default-features --features ssr --target x86_64-unknown-linux-musl
 
 debug:
-	RUST_LOG=debug cargo run
+	RUST_LOG=debug cargo leptos serve
 
-debug-target: build-debug
-	cd target/debug && RUST_LOG=info ./hacker-news-rs --port 3000
-
-run:
-	cargo run --release
+watch:
+	cargo leptos watch
 
 clean:
 	cargo clean
@@ -27,4 +24,4 @@ check:
 	cargo check
 
 install-linux: build-static-linux
-	cp ./target/x86_64-unknown-linux-musl/release/hacker-news-rs ~/.local/bin/
+	cp ./target/x86_64-unknown-linux-musl/release/hns ~/.local/bin/

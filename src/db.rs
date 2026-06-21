@@ -151,7 +151,6 @@ pub fn update_story_summary(
     episode_date: &str,
     hn_id: i64,
     summary: Option<&str>,
-    summary_zh: Option<&str>,
 ) -> Result<Story, AppError> {
     let tree = db.open_tree(STORIES_TREE)?;
     let key = story_key(episode_date, hn_id);
@@ -167,9 +166,6 @@ pub fn update_story_summary(
 
     if let Some(s) = summary {
         story.summary = Some(s.to_string());
-    }
-    if let Some(s) = summary_zh {
-        story.summary_zh = Some(s.to_string());
     }
 
     let data = serde_json::to_vec(&story)?;

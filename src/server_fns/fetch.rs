@@ -7,7 +7,6 @@ use crate::models::FetchProgress;
 use std::collections::HashSet;
 #[cfg(feature = "ssr")]
 use std::sync::Arc;
-
 #[cfg(feature = "ssr")]
 use crate::models::{HnStory, Story};
 #[cfg(feature = "ssr")]
@@ -21,7 +20,7 @@ fn app_state() -> Result<Arc<AppState>, ServerFnError> {
 
 /// Start a background fetch and return a fetch_id for polling
 #[server]
-pub async fn start_fetch(lang: String) -> Result<String, ServerFnError> {
+pub async fn start_fetch() -> Result<String, ServerFnError> {
     let state = app_state()?;
 
     if state.config.api_key.is_empty() {
@@ -47,7 +46,7 @@ pub async fn start_fetch(lang: String) -> Result<String, ServerFnError> {
     let fetch_progress = state.fetch_progress.clone();
 
     tokio::spawn(async move {
-        if let Err(e) = fetch_stories_task(db, config, http_client, &lang, &fetch_id_clone, fetch_progress.clone()).await {
+        if let Err(e) = fetch_stories_task(db, config, http_client, &fetch_id_clone, fetch_progress.clone()).await {
             tracing::error!("Fetch task error: {}", e);
             if let Some(mut progress) = fetch_progress.get_mut(&fetch_id_clone) {
                 progress.finished = true;
@@ -75,7 +74,6 @@ async fn fetch_stories_task(
     db: Arc<sled::Db>,
     config: Arc<crate::config::AppConfig>,
     http_client: reqwest::Client,
-    lang: &str,
     fetch_id: &str,
     fetch_progress: Arc<dashmap::DashMap<String, FetchProgress>>,
 ) -> anyhow::Result<()> {
@@ -162,7 +160,7 @@ async fn fetch_stories_task(
     }
 
     // Save stories first (without summaries)
-    let llm_client = crate::llm::LlmClient::new(&config, http_client);
+    let llm_client = crate::llm::LlmClient::new(config.clone(), http_client);
     let mut saved_stories: Vec<Story> = Vec::new();
 
     for hn_story in &all_hn_stories {
@@ -192,21 +190,19 @@ async fn fetch_stories_task(
             .map(|story| {
                 let db = db.clone();
                 let llm_client = llm_client.clone();
-                let lang = lang.to_string();
                 let story_clone = story.clone();
 
                 async move {
                     match llm_client
-                        .summarize(&story_clone.title, story_clone.url.as_deref(), &lang)
+                        .summarize(&story_clone.title, story_clone.url.as_deref())
                         .await
                     {
-                        Ok((summary, summary_zh)) => {
+                        Ok(summary) => {
                             let _ = crate::db::update_story_summary(
                                 &db,
                                 &story_clone.episode_date,
                                 story_clone.hn_id,
                                 summary.as_deref(),
-                                summary_zh.as_deref(),
                             );
                             Ok(story_clone.hn_id)
                         }
