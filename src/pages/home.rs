@@ -15,6 +15,9 @@ use crate::server_fns::episodes::{
 use crate::server_fns::fetch::start_fetch;
 use crate::server_fns::stories::regenerate_summary;
 
+#[cfg(not(feature = "ssr"))]
+use crate::server_fns::stories::get_story;
+
 /// Main home page component
 #[component]
 pub fn HomePage() -> impl IntoView {
@@ -84,7 +87,10 @@ pub fn HomePage() -> impl IntoView {
     let (toast_type, set_toast_type) = signal(String::new());
     let (toast_visible, set_toast_visible) = signal(false);
 
-    // Current episode data
+    // Signal-based story list — updated incrementally via SSE, no full refetch
+    let (stories_signal, set_stories) = signal(Vec::<Story>::new());
+
+    // Current episode data (used for initial load and date changes)
     let episode_resource = Resource::new(
         move || selected_date.get(),
         move |date| async move {
@@ -94,6 +100,13 @@ pub fn HomePage() -> impl IntoView {
             }
         },
     );
+
+    // When episode resource resolves, update the local stories signal
+    Effect::new(move |_| {
+        if let Some(data) = episode_resource.get().flatten() {
+            set_stories.set(data.stories);
+        }
+    });
 
     // Episodes list for calendar
     let episodes_resource = Resource::new(
@@ -141,6 +154,7 @@ pub fn HomePage() -> impl IntoView {
         let episode_resource = episode_resource;
         let episodes_resource = episodes_resource;
         let set_is_fetching = set_is_fetching;
+        let set_stories = set_stories;
         let show_toast = show_toast;
 
         spawn_local(async move {
@@ -151,6 +165,7 @@ pub fn HomePage() -> impl IntoView {
                         episode_resource,
                         episodes_resource,
                         set_is_fetching,
+                        set_stories,
                         show_toast,
                     );
                 }
@@ -176,12 +191,18 @@ pub fn HomePage() -> impl IntoView {
         }
     };
 
-    // Regenerate summary
+    // Regenerate summary — update only the affected story
     let do_regenerate = move |hn_id: i64| {
+        let set_stories = set_stories;
         spawn_local(async move {
             match regenerate_summary(hn_id).await {
-                Ok(_) => {
-                    episode_resource.refetch();
+                Ok(updated) => {
+                    // Update only this story in the signal
+                    set_stories.update(|stories| {
+                        if let Some(s) = stories.iter_mut().find(|s| s.hn_id == hn_id) {
+                            *s = updated;
+                        }
+                    });
                 }
                 Err(e) => {
                     show_toast(format!("错误: {}", e), "error".to_string());
@@ -190,18 +211,20 @@ pub fn HomePage() -> impl IntoView {
         });
     };
 
-    // Get current stories from resource
-    let current_stories = move || {
-        episode_resource
-            .get()
-            .flatten()
-            .map(|d| d.stories)
-            .unwrap_or_default()
-    };
+    // Auto-fetch on page load (client only, runs once)
+    {
+        let fetched = std::rc::Rc::new(std::cell::Cell::new(false));
+        Effect::new(move |_| {
+            if !leptos::prelude::is_server() && !fetched.get() {
+                fetched.set(true);
+                do_fetch();
+            }
+        });
+    }
 
-    // Filter and sort stories
+    // Filter and sort stories from the local signal
     let display_stories = move || {
-        let stories = current_stories();
+        let stories = stories_signal.get();
         let reads = read_stories.get();
         let show_unread = show_only_unread.get();
 
@@ -275,17 +298,26 @@ pub fn HomePage() -> impl IntoView {
                             } else {
                                 view! {
                                     <div>
-                                        {stories.into_iter().enumerate().map(|(idx, story)| {
-                                            view! {
-                                                <StoryCard
-                                                    story=story
-                                                    index=idx
-                                                    read_stories=read_stories
-                                                    on_mark_read=Callback::new(move |id| mark_read(id))
-                                                    on_regenerate=Callback::new(move |id| do_regenerate(id))
-                                                />
+                                        <For
+                                            each=move || display_stories()
+                                            key=|story| story.hn_id
+                                            children=move |story| {
+                                                // Compute index from the current display list
+                                                let idx = display_stories()
+                                                    .iter()
+                                                    .position(|s| s.hn_id == story.hn_id)
+                                                    .unwrap_or(0);
+                                                view! {
+                                                    <StoryCard
+                                                        story=story
+                                                        index=idx
+                                                        read_stories=read_stories
+                                                        on_mark_read=Callback::new(move |id| mark_read(id))
+                                                        on_regenerate=Callback::new(move |id| do_regenerate(id))
+                                                    />
+                                                }
                                             }
-                                        }).collect::<Vec<_>>()}
+                                        />
                                     </div>
                                 }.into_any()
                             }
@@ -324,11 +356,13 @@ pub fn HomePage() -> impl IntoView {
 }
 
 /// Listen to SSE fetch events for real-time UI updates (client only)
+/// Uses incremental updates — only fetches the changed story, not the whole list
 #[cfg(not(feature = "ssr"))]
 fn listen_fetch_events(
     episode_resource: Resource<Option<crate::models::EpisodeWithStories>>,
     episodes_resource: Resource<Vec<crate::models::Episode>>,
     set_is_fetching: WriteSignal<bool>,
+    set_stories: WriteSignal<Vec<crate::models::Story>>,
     show_toast: impl Fn(String, String) + 'static,
 ) {
     use wasm_bindgen::closure::Closure;
@@ -342,17 +376,41 @@ fn listen_fetch_events(
             let data = e.data().as_string().unwrap_or_default();
             if let Ok(event) = serde_json::from_str::<crate::models::FetchEvent>(&data) {
                 match event {
-                    crate::models::FetchEvent::StoryAdded { .. } => {
-                        episode_resource.refetch();
+                    crate::models::FetchEvent::StoryAdded { hn_id } => {
+                        // Fetch only the new story and append it
+                        let set_stories = set_stories;
+                        spawn_local(async move {
+                            if let Ok(Some(story)) = get_story(hn_id).await {
+                                set_stories.update(|stories| {
+                                    // Avoid duplicate
+                                    if !stories.iter().any(|s| s.hn_id == hn_id) {
+                                        stories.push(story);
+                                    }
+                                });
+                            }
+                        });
                     }
-                    crate::models::FetchEvent::SummaryDone { .. } => {
-                        episode_resource.refetch();
+                    crate::models::FetchEvent::SummaryDone { hn_id } => {
+                        // Fetch only the updated story and replace it in-place
+                        let set_stories = set_stories;
+                        spawn_local(async move {
+                            if let Ok(Some(story)) = get_story(hn_id).await {
+                                set_stories.update(|stories| {
+                                    if let Some(s) = stories.iter_mut().find(|s| s.hn_id == hn_id) {
+                                        *s = story;
+                                    }
+                                });
+                            }
+                        });
                     }
-                    crate::models::FetchEvent::SummaryError { .. } => {
-                        episode_resource.refetch();
+                    crate::models::FetchEvent::SummaryError { hn_id } => {
+                        // Just log to console, no UI update needed for errors
+                        web_sys::console::log_1(&format!("Summary generation failed for story {}", hn_id).into());
                     }
                     crate::models::FetchEvent::Finished { summaries, .. } => {
                         set_is_fetching.set(false);
+                        // Final refetch to ensure consistency
+                        episode_resource.refetch();
                         episodes_resource.refetch();
                         show_toast(
                             format!("已获取 {} 篇故事", summaries),
@@ -387,6 +445,7 @@ fn listen_fetch_events(
     _episode_resource: Resource<Option<crate::models::EpisodeWithStories>>,
     _episodes_resource: Resource<Vec<crate::models::Episode>>,
     _set_is_fetching: WriteSignal<bool>,
+    _set_stories: WriteSignal<Vec<crate::models::Story>>,
     _show_toast: impl Fn(String, String) + 'static,
 ) {
     // No-op on server

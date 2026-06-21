@@ -12,6 +12,14 @@ fn app_state() -> Result<std::sync::Arc<AppState>, ServerFnError> {
         .ok_or_else(|| ServerFnError::new("AppState not found"))
 }
 
+/// Fetch a single story by its HN ID (for incremental SSE updates)
+#[server]
+pub async fn get_story(hn_id: i64) -> Result<Option<Story>, ServerFnError> {
+    let state = app_state()?;
+    crate::db::get_story_by_hn_id(&state.db, hn_id)
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
+
 #[server]
 pub async fn regenerate_summary(hn_id: i64) -> Result<Story, ServerFnError> {
     let state = app_state()?;

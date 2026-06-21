@@ -308,6 +308,47 @@ body {
     font-size: 0.9em;
 }
 
+.story-summary blockquote {
+    border-left: 3px solid var(--accent-color);
+    margin: 0.5em 0;
+    padding: 0.2em 0.8em;
+    color: var(--text-muted);
+}
+
+.story-summary a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.story-summary a:hover {
+    text-decoration: underline;
+}
+
+.story-summary pre {
+    background: var(--bg-tertiary);
+    padding: 0.6em 0.8em;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+.story-summary pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+}
+
+.story-summary li {
+    margin: 0.2em 0;
+}
+
+.story-summary hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 0.8em 0;
+}
+
 .story-summary.placeholder {
     color: var(--text-muted);
     font-style: italic;

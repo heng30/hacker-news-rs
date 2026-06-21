@@ -68,7 +68,7 @@ impl HnClient {
     /// Search stories by keyword using the Algolia HN Search API
     pub async fn search_by_keyword(&self, keyword: &str) -> Result<Vec<HnStory>> {
         let url = format!(
-            "https://hn.algolia.com/api/v1/search?query={}&tags=story",
+            "https://hn.algolia.com/api/v1/search?query={}&tags=story&hitsPerPage=50",
             keyword
         );
         tracing::info!("Searching Algolia for keyword '{}'", keyword);
@@ -79,14 +79,23 @@ impl HnClient {
         let stories: Vec<HnStory> = search_result
             .hits
             .into_iter()
-            .map(|hit| HnStory {
-                id: hit.object_id,
-                title: hit.title,
-                url: hit.url,
-                by: hit.author,
-                score: hit.points,
-                time: hit.created_at_i,
-                tag: keyword.to_string(),
+            .filter_map(|hit| {
+                let id: i64 = match hit.object_id.parse() {
+                    Ok(id) => id,
+                    Err(e) => {
+                        tracing::warn!("Skipping hit with non-numeric objectID '{}': {}", hit.object_id, e);
+                        return None;
+                    }
+                };
+                Some(HnStory {
+                    id,
+                    title: hit.title,
+                    url: hit.url,
+                    by: hit.author,
+                    score: hit.points,
+                    time: hit.created_at_i,
+                    tag: keyword.to_string(),
+                })
             })
             .collect();
 
@@ -101,8 +110,10 @@ struct AlgoliaSearchResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
 struct AlgoliaHit {
-    object_id: i64,
+    #[serde(rename = "objectID")]
+    object_id: String,
     title: String,
     url: Option<String>,
     author: String,

@@ -2,7 +2,29 @@ use leptos::prelude::*;
 
 use crate::models::Story;
 
+/// Parse Markdown to HTML using marked.js (client only)
+#[cfg(not(feature = "ssr"))]
+fn marked_parse(md: &str) -> String {
+    use wasm_bindgen::prelude::*;
+
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(js_namespace = marked, js_name = parse)]
+        fn marked_parse_js(source: &str) -> String;
+    }
+
+    marked_parse_js(md)
+}
+
+#[cfg(feature = "ssr")]
+fn marked_parse(md: &str) -> String {
+    // SSR fallback: return raw markdown, client will re-render
+    md.to_string()
+}
+
 /// Render a single story card
+/// Uses a signal for the story so that updates (e.g. summary) only re-render this card,
+/// not the entire list — preserving scroll position.
 #[component]
 pub fn StoryCard(
     story: Story,
@@ -12,18 +34,26 @@ pub fn StoryCard(
     on_regenerate: Callback<i64>,
 ) -> impl IntoView {
     let hn_id = story.hn_id;
-    let title = story.title.clone();
-    let url = story.url.clone().unwrap_or_default();
-    let by = story.by.clone();
-    let score = story.score;
-    let tag = story.tag.clone();
-    let summary = story.summary.clone();
+    // Keep story in a local signal so summary updates only re-render this card
+    let (story_sig, _) = signal(story);
+
+    // Listen for story updates from the parent — when the parent's signal
+    // changes this story, we receive the updated version via a context or
+    // we rely on the key-based reconciliation. Since we use hn_id as a stable
+    // key, Leptos will reuse the component. We store the latest story in a
+    // local signal that the view reacts to.
+    let title = move || story_sig.get().title;
+    let url = move || story_sig.get().url.clone().unwrap_or_default();
+    let by = move || story_sig.get().by;
+    let score = move || story_sig.get().score;
+    let tag = move || story_sig.get().tag;
+    let summary = move || story_sig.get().summary.clone();
 
     view! {
         <div class=move || if read_stories.get().contains(&hn_id) { "story clicked" } else { "story" }>
             <div class="story-title">
                 <a href=url target="_blank" on:click=move |_| on_mark_read.run(hn_id)>
-                    {format!("{}. {}", index + 1, title)}
+                    {format!("{}. ", index + 1)}{title}
                 </a>
                 <div class="story-actions">
                     <button
@@ -60,24 +90,34 @@ pub fn StoryCard(
                 </div>
             </div>
             <div class="story-meta">
-                {format!("{} 分 by {}", score, by)}
-                {if tag != "top" {
-                    view! { <span class="story-tag">{format!(" | {}", tag)}</span> }.into_any()
-                } else {
-                    view! { <span></span> }.into_any()
+                {move || format!("{} 分 by {}", score(), by())}
+                {move || {
+                    let t = tag();
+                    if t != "top" {
+                        view! { <span class="story-tag">{format!(" | {}", t)}</span> }.into_any()
+                    } else {
+                        view! { <span></span> }.into_any()
+                    }
                 }}
                 {format!(" | ")}
                 <a href=format!("https://news.ycombinator.com/item?id={}", hn_id) target="_blank">"讨论"</a>
             </div>
             {move || {
                 let reads = read_stories.get();
-                let has_summary = summary.is_some();
-                let display_summary = summary.clone().unwrap_or_default();
+                let s = summary();
+                let has_summary = s.is_some();
+                let display_summary = s.unwrap_or_default();
                 let is_read = reads.contains(&hn_id);
 
                 if has_summary && !display_summary.is_empty() {
+                    // Render Markdown to HTML via marked.js (client only)
+                    let html = if !leptos::prelude::is_server() {
+                        marked_parse(&display_summary)
+                    } else {
+                        display_summary
+                    };
                     view! {
-                        <div class="story-summary" inner_html=display_summary></div>
+                        <div class="story-summary markdown-body" inner_html=html></div>
                     }.into_any()
                 } else if !has_summary && !is_read {
                     view! {
