@@ -1,10 +1,7 @@
-use std::sync::Arc;
-
+use crate::{config::AppConfig, models::FetchEvent};
 use sled::Db;
+use std::sync::Arc;
 use tokio::sync::broadcast;
-
-use crate::config::AppConfig;
-use crate::models::FetchEvent;
 
 /// Shared application state available to all handlers and server_fns
 #[derive(Clone)]

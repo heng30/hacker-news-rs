@@ -1,29 +1,26 @@
-use std::sync::Arc;
-
+use crate::{
+    error::AppError,
+    models::{Episode, EpisodeWithStories, Story},
+};
 use sled::Db;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 use tracing::{debug, info};
 
-use crate::error::AppError;
-use crate::models::{Episode, EpisodeWithStories, Story};
-
-/// Key prefix for episodes tree
-const EPISODES_TREE: &str = "episodes";
-/// Key prefix for stories tree
 const STORIES_TREE: &str = "stories";
-/// Key prefix for URL hashes tree (dedup)
+const EPISODES_TREE: &str = "episodes";
 const URL_HASHES_TREE: &str = "url_hashes";
 
-/// Initialize sled database trees
 pub fn init_trees(db: &Db) -> Result<(), AppError> {
-    // Open trees to ensure they exist
     db.open_tree(EPISODES_TREE)?;
     db.open_tree(STORIES_TREE)?;
     db.open_tree(URL_HASHES_TREE)?;
     db.flush()?;
     Ok(())
 }
-
-// ── Episode operations ──────────────────────────────────────────────
 
 /// Create a new episode for the given date, or return existing one
 pub fn create_episode(db: &Arc<Db>, date: &str) -> Result<Episode, AppError> {
@@ -218,7 +215,10 @@ pub fn delete_stories_by_hn_ids(db: &Arc<Db>, hn_ids: &[i64]) -> Result<usize, A
 }
 
 /// Get an episode with its stories
-pub fn get_episode_with_stories(db: &Arc<Db>, date: &str) -> Result<Option<EpisodeWithStories>, AppError> {
+pub fn get_episode_with_stories(
+    db: &Arc<Db>,
+    date: &str,
+) -> Result<Option<EpisodeWithStories>, AppError> {
     let episode = get_episode_by_date(db, date)?;
 
     match episode {
@@ -249,16 +249,12 @@ pub fn get_episode_with_stories(db: &Arc<Db>, date: &str) -> Result<Option<Episo
     }
 }
 
-// ── URL hash operations ─────────────────────────────────────────────
-
-/// Check if a URL has already been fetched
 pub fn is_url_seen(db: &Arc<Db>, url: &str) -> Result<bool, AppError> {
     let tree = db.open_tree(URL_HASHES_TREE)?;
     let hash = blake3_hash(url);
     Ok(tree.contains_key(&hash)?)
 }
 
-/// Mark a URL as seen
 pub fn mark_url_seen(db: &Arc<Db>, url: &str) -> Result<(), AppError> {
     let tree = db.open_tree(URL_HASHES_TREE)?;
     let hash = blake3_hash(url);
@@ -267,10 +263,8 @@ pub fn mark_url_seen(db: &Arc<Db>, url: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Simple hash function for URLs
 pub fn blake3_hash(url: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut hasher = DefaultHasher::new();
     url.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
 }

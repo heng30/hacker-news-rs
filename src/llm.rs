@@ -1,9 +1,10 @@
+use crate::{
+    bot::{APIConfig, Chat, ChatConfig, StreamTextItem},
+    config::AppConfig,
+};
 use anyhow::Result;
 use std::sync::Arc;
-use crate::bot::{APIConfig, Chat, ChatConfig, StreamTextItem};
 use tokio::sync::mpsc;
-
-use crate::config::AppConfig;
 
 #[derive(Clone)]
 pub struct LlmClient {
@@ -20,11 +21,7 @@ impl LlmClient {
     }
 
     /// Generate Chinese summary
-    pub async fn summarize(
-        &self,
-        title: &str,
-        url: Option<&str>,
-    ) -> Result<Option<String>> {
+    pub async fn summarize(&self, title: &str, url: Option<&str>) -> Result<Option<String>> {
         let content = match url {
             Some(u) => {
                 crate::fetcher::fetch_url_content(
@@ -62,7 +59,11 @@ impl LlmClient {
             api_model: self.config.model.clone(),
             api_key: self.config.api_key.clone(),
             temperature: Some(0.7),
-            no_stream: if self.config.llm_no_stream { Some(true) } else { None },
+            no_stream: if self.config.llm_no_stream {
+                Some(true)
+            } else {
+                None
+            },
             user_agent: self.config.llm_user_agent.clone(),
             request_timeout: self.config.llm_timeout,
         };
