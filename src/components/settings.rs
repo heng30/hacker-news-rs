@@ -56,55 +56,55 @@ pub fn SettingsModal(
                 <div class="modal-header">
                     <h2>
                         <span class="icon" inner_html=icons::SETTINGS_WITH_STYLE></span>
-                        "Configuration"
+                        "设置"
                     </h2>
                     <button class="modal-close" on:click=move |_| on_close.run(())>"×"</button>
                 </div>
 
-                <Suspense fallback=|| view! { <div>"Loading..."</div> }>
+                <Suspense fallback=|| view! { <div>"加载中..."</div> }>
                     {move || config_resource.get().map(|config| {
                         match config {
                             Some(c) => {
                                 let api_base_url = c.api_base_url.clone();
                                 let model = c.model.clone();
                                 let masked_api_key = c.masked_api_key.clone();
-                                let socks5 = c.socks5_proxy.clone().unwrap_or_else(|| "Disabled".to_string());
-                                let keywords = c.search_keywords.clone().unwrap_or_else(|| "Disabled".to_string());
+                                let socks5 = c.socks5_proxy.clone().unwrap_or_else(|| "未启用".to_string());
+                                let keywords = c.search_keywords.clone().unwrap_or_else(|| "未启用".to_string());
                                 let auto_update = if c.auto_update_interval > 0 {
-                                    format!("{} min", c.auto_update_interval)
+                                    format!("{} 分钟", c.auto_update_interval)
                                 } else {
-                                    "Disabled".to_string()
+                                    "未启用".to_string()
                                 };
                                 view! {
                                     <>
                                         <div class="form-group">
-                                            <label>"API Base URL"</label>
+                                            <label>"API 地址"</label>
                                             <div class="env-badge"><span>{api_base_url}</span></div>
                                         </div>
                                         <div class="form-group">
-                                            <label>"Model"</label>
+                                            <label>"模型"</label>
                                             <div class="env-badge"><span>{model}</span></div>
                                         </div>
                                         <div class="form-group">
-                                            <label>"API Key"</label>
+                                            <label>"API 密钥"</label>
                                             <div class="env-badge"><span>{masked_api_key}</span></div>
                                         </div>
                                         <div class="form-group">
-                                            <label>"SOCKS5 Proxy"</label>
+                                            <label>"SOCKS5 代理"</label>
                                             <div class="env-badge"><span>{socks5}</span></div>
                                         </div>
                                         <div class="form-group">
-                                            <label>"Search Keywords"</label>
+                                            <label>"搜索关键词"</label>
                                             <div class="env-badge"><span>{keywords}</span></div>
                                         </div>
                                         <div class="form-group">
-                                            <label>"Auto Update"</label>
+                                            <label>"自动更新"</label>
                                             <div class="env-badge"><span>{auto_update}</span></div>
                                         </div>
                                     </>
                                 }.into_any()
                             }
-                            None => view! { <div>"Failed to load config"</div> }.into_any(),
+                            None => view! { <div>"加载配置失败"</div> }.into_any(),
                         }
                     })}
                 </Suspense>
@@ -112,13 +112,13 @@ pub fn SettingsModal(
                 <div class="modal-divider"></div>
 
                 <div class="form-group data-management">
-                    <label>"Data Management"</label>
+                    <label>"数据管理"</label>
                     <div class="modal-actions">
                         <button class="btn-secondary" on:click=move |_| handle_delete_read()>
-                            "Remove all read stories"
+                            "删除所有已读故事"
                         </button>
                         <button class="btn-danger" on:click=move |_| handle_delete_all()>
-                            "Remove all stories"
+                            "删除所有故事"
                         </button>
                     </div>
                 </div>

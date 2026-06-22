@@ -15,7 +15,7 @@ pub fn CalendarModal(
     let (view_month, set_view_month) = signal(now.month() as i32);
 
     let day_headers = move || {
-        let headers = vec!["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+        let headers = vec!["日", "一", "二", "三", "四", "五", "六"];
         headers
             .into_iter()
             .map(|d| {
@@ -154,7 +154,7 @@ pub fn CalendarModal(
                 <div class="modal-header">
                     <h2>
                         <span class="icon" inner_html=icons::CALENDAR_WITH_STYLE></span>
-                        "Calendar"
+                        "日历"
                     </h2>
                     <button class="modal-close" on:click=move |_| on_close.run(())>"×"</button>
                 </div>
