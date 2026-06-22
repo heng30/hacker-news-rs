@@ -20,12 +20,11 @@ mod ssr {
     use clap::Parser;
     use futures::stream::Stream;
     use hns::{
-        api::HnClient,
         app::App,
         config::{AppConfig, Args},
         db,
-        llm::LlmClient,
-        models::{FetchEvent, HnStory, Story},
+        models::FetchEvent,
+        server_fns::fetch::fetch_stories_task,
         shell::shell,
         state::AppState,
         static_files::static_handler,
@@ -147,10 +146,15 @@ mod ssr {
                     interval.tick().await;
                     tracing::debug!("Auto-update triggered");
 
-                    match background_fetch(state.clone()).await {
-                        Ok(count) => {
-                            tracing::debug!("Auto-update completed: {} stories processed", count)
-                        }
+                    match fetch_stories_task(
+                        state.db.clone(),
+                        state.config.clone(),
+                        state.http_client.clone(),
+                        state.fetch_events.clone(),
+                    )
+                    .await
+                    {
+                        Ok(()) => tracing::debug!("Auto-update completed"),
                         Err(e) => tracing::error!("Auto-update failed: {}", e),
                     }
                 }
@@ -224,7 +228,7 @@ mod ssr {
     /// 3. 将每个 FetchEvent 序列化为 JSON，封装为 SSE Event 推送给客户端
     /// 4. 启用 keep-alive 防止连接因空闲被中间代理/负载均衡器断开
     ///
-    /// 数据流：background_fetch → event_tx.send() → broadcast channel → rx → SSE → 客户端
+    /// 数据流：fetch_stories_task → event_tx.send() → broadcast channel → rx → SSE → 客户端
     async fn fetch_events_sse(
         axum::extract::State(app_state): axum::extract::State<Arc<AppState>>,
     ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
@@ -243,127 +247,5 @@ mod ssr {
         });
         // keep_alive 定期发送心跳注释帧（`: comment\n\n`），保持连接活跃
         Sse::new(stream).keep_alive(KeepAlive::default())
-    }
-
-    async fn background_fetch(state: Arc<AppState>) -> anyhow::Result<usize> {
-        if state.config.api_key.is_empty() {
-            tracing::warn!("Auto-update skipped: API key not configured");
-            return Ok(0);
-        }
-
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let _episode = db::create_episode(&state.db, &today)?;
-
-        let hn_client = HnClient::new(state.http_client.clone());
-        let top_ids = hn_client.fetch_top_stories().await?;
-        let all_top_stories = hn_client.fetch_stories(&top_ids).await?;
-
-        let min_score = state.config.top_story_min_score;
-        let stories: Vec<HnStory> = all_top_stories
-            .into_iter()
-            .filter(|s| {
-                let url_key = s.url.as_deref().unwrap_or(&s.title);
-                !db::is_url_seen(&state.db, url_key).unwrap_or(false)
-            })
-            .filter(|s| s.score >= min_score)
-            .collect();
-
-        let total_stories = stories.len();
-        tracing::debug!("Auto-update: {} new stories to process", total_stories);
-
-        if stories.is_empty() {
-            _ = state.fetch_events.send(FetchEvent::Finished {
-                total: 0,
-                summaries: 0,
-                errors: 0,
-            });
-            return Ok(0);
-        }
-
-        let llm_client = LlmClient::new(state.config.clone(), state.http_client.clone());
-        let mut saved: Vec<Story> = Vec::new();
-
-        for hn_story in stories {
-            let mut story: Story = hn_story.into();
-            story.episode_date = today.clone();
-            db::save_story(&state.db, &story)?;
-
-            let url_key = story.url.as_deref().unwrap_or(&story.title);
-            _ = db::mark_url_seen(&state.db, url_key);
-
-            if let Some(s) = db::get_story_by_hn_id(&state.db, story.hn_id)? {
-                saved.push(s);
-                _ = state
-                    .fetch_events
-                    .send(FetchEvent::StoryAdded { hn_id: story.hn_id });
-            }
-        }
-
-        let mut errors_count = 0usize;
-        let mut summaries_count = 0usize;
-        let concurrency = state.config.summary_concurrency;
-
-        for chunk in saved.chunks(concurrency) {
-            let futures: Vec<_> = chunk
-                .iter()
-                .map(|story| {
-                    let db = state.db.clone();
-                    let llm = llm_client.clone();
-                    let story_clone = story.clone();
-
-                    async move {
-                        match llm
-                            .summarize(&story_clone.title, story_clone.url.as_deref())
-                            .await
-                        {
-                            Ok(summary) => {
-                                _ = db::update_story_summary(
-                                    &db,
-                                    &story_clone.episode_date,
-                                    story_clone.hn_id,
-                                    summary.as_deref(),
-                                );
-                                Ok(story_clone.hn_id)
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Auto-update: Failed to summarize {}: {}",
-                                    story_clone.hn_id,
-                                    e
-                                );
-                                Err(story_clone.hn_id)
-                            }
-                        }
-                    }
-                })
-                .collect();
-
-            let results = futures::future::join_all(futures).await;
-
-            for result in &results {
-                match result {
-                    Ok(hn_id) => {
-                        summaries_count += 1;
-                        _ = state
-                            .fetch_events
-                            .send(FetchEvent::SummaryDone { hn_id: *hn_id });
-                    }
-                    Err(hn_id) => {
-                        errors_count += 1;
-                        _ = state
-                            .fetch_events
-                            .send(FetchEvent::SummaryError { hn_id: *hn_id });
-                    }
-                }
-            }
-        }
-
-        _ = state.fetch_events.send(FetchEvent::Finished {
-            total: total_stories,
-            summaries: summaries_count,
-            errors: errors_count,
-        });
-
-        Ok(summaries_count)
     }
 }

@@ -1,14 +1,12 @@
+use crate::{components::icons, models::Episode};
 use chrono::Datelike;
 use leptos::prelude::*;
 
-use crate::models::Episode;
-
-/// Calendar modal component
 #[component]
 pub fn CalendarModal(
     is_open: ReadSignal<bool>,
-    episodes: Vec<Episode>,
-    selected_date: Option<String>,
+    episodes: ReadSignal<Vec<Episode>>,
+    selected_date: ReadSignal<Option<String>>,
     on_select_date: Callback<String>,
     on_close: Callback<()>,
 ) -> impl IntoView {
@@ -42,7 +40,7 @@ pub fn CalendarModal(
         let prev_month_last = first_day.pred_opt().unwrap_or(first_day);
 
         let episode_dates: std::collections::HashSet<String> =
-            episodes.iter().map(|e| e.date.clone()).collect();
+            episodes.get().iter().map(|e| e.date.clone()).collect();
         let today = chrono::Local::now().date_naive();
 
         let mut cells: Vec<AnyView> = Vec::new();
@@ -63,7 +61,7 @@ pub fn CalendarModal(
             let date_str = format!("{}-{:02}-{:02}", year, month, day);
             let is_today = year == today.year() && month == today.month() && day == today.day();
             let has_data = episode_dates.contains(&date_str);
-            let is_selected = selected_date.as_ref() == Some(&date_str);
+            let is_selected = selected_date.get().as_ref() == Some(&date_str);
 
             let mut classes = vec!["calendar-day"];
             if is_today {
@@ -117,8 +115,8 @@ pub fn CalendarModal(
     };
 
     let prev_month = move || {
-        let m = view_month.get();
-        let y = view_year.get();
+        let m = view_month.get_untracked();
+        let y = view_year.get_untracked();
         if m <= 1 {
             set_view_month.set(12);
             set_view_year.set(y - 1);
@@ -128,8 +126,8 @@ pub fn CalendarModal(
     };
 
     let next_month = move || {
-        let m = view_month.get();
-        let y = view_year.get();
+        let m = view_month.get_untracked();
+        let y = view_year.get_untracked();
         if m >= 12 {
             set_view_month.set(1);
             set_view_year.set(y + 1);
@@ -155,12 +153,7 @@ pub fn CalendarModal(
             <div class="modal calendar-modal">
                 <div class="modal-header">
                     <h2>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                            <line x1="16" y1="2" x2="16" y2="6" />
-                            <line x1="8" y1="2" x2="8" y2="6" />
-                            <line x1="3" y1="10" x2="21" y2="10" />
-                        </svg>
+                        <span class="icon" inner_html=icons::CALENDAR_WITH_STYLE></span>
                         "Calendar"
                     </h2>
                     <button class="modal-close" on:click=move |_| on_close.run(())>"×"</button>
@@ -168,20 +161,16 @@ pub fn CalendarModal(
                 <div class="calendar-card-modal">
                     <div class="calendar-header">
                         <button class="calendar-nav" on:click=move |_| prev_month()>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M15 18l-6-6 6-6" />
-                            </svg>
+                            <span class="icon" inner_html=icons::CHEVRON_LEFT></span>
                         </button>
-                        <h3>{month_title()}</h3>
+                        <h3>{month_title}</h3>
                         <button class="calendar-nav" on:click=move |_| next_month()>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M9 18l6-6-6-6" />
-                            </svg>
+                            <span class="icon" inner_html=icons::CHEVRON_RIGHT></span>
                         </button>
                     </div>
                     <div class="calendar-grid">
                         {day_headers()}
-                        {calendar_days()}
+                        {calendar_days}
                     </div>
                 </div>
             </div>

@@ -93,6 +93,8 @@ impl HnClient {
         let response = self.client.get(&url).send().await?;
         let search_result: AlgoliaSearchResponse = response.json().await?;
 
+        tracing::trace!("{:?}", search_result);
+
         let stories: Vec<HnStory> = search_result
             .hits
             .into_iter()

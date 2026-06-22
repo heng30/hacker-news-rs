@@ -11,7 +11,7 @@ build-debug:
 build-static-linux: build
 	CC_x86_64_unknown_linux_musl=x86_64-unknown-linux-musl-gcc cargo build --release --no-default-features --features ssr --target x86_64-unknown-linux-musl
 
-debug:
+debug: build-debug
 	RUST_LOG=debug cargo leptos serve
 
 watch:

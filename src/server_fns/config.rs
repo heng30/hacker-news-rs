@@ -1,16 +1,9 @@
+use crate::models::ConfigResponse;
 use leptos::prelude::*;
 use server_fn::error::ServerFnError;
 
-use crate::models::ConfigResponse;
-
 #[cfg(feature = "ssr")]
-use crate::state::AppState;
-
-#[cfg(feature = "ssr")]
-fn app_state() -> Result<std::sync::Arc<AppState>, ServerFnError> {
-    use_context::<std::sync::Arc<AppState>>()
-        .ok_or_else(|| ServerFnError::new("AppState not found"))
-}
+use super::app_state;
 
 #[server]
 pub async fn get_config() -> Result<ConfigResponse, ServerFnError> {

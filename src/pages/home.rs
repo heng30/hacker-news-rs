@@ -1,7 +1,7 @@
 use crate::{
     components::{
-        calendar::CalendarModal, layout::Navbar, settings::SettingsModal, story_card::StoryCard,
-        toast::Toast,
+        calendar::CalendarModal, icons, layout::Navbar, settings::SettingsModal,
+        story_card::StoryCard, toast::Toast,
     },
     models::{Episode, EpisodeWithStories, Story},
     server_fns::{
@@ -95,11 +95,17 @@ pub fn HomePage() -> impl IntoView {
         }
     });
 
-    // Episodes list for calendar
+    // Episodes list for calendar — store in signal to avoid resource access outside Suspense
+    let (episodes_signal, set_episodes) = signal(Vec::<Episode>::new());
     let episodes_resource = Resource::new(
         || (),
         move |_| async move { get_episodes().await.ok().unwrap_or_default() },
     );
+    Effect::new(move |_| {
+        if let Some(data) = episodes_resource.get() {
+            set_episodes.set(data);
+        }
+    });
 
     let show_toast = move |msg: String, t: String| {
         set_toast_msg.set(msg);
@@ -219,8 +225,6 @@ pub fn HomePage() -> impl IntoView {
         }
     };
 
-    let episodes_list = move || episodes_resource.get().unwrap_or_default();
-
     view! {
         <Navbar
             is_fetching=is_fetching
@@ -254,10 +258,7 @@ pub fn HomePage() -> impl IntoView {
                             if stories.is_empty() {
                                 view! {
                                     <div class="empty-state">
-                                        <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M4 4h16v16H4z" />
-                                            <path d="M9 9h6M9 12h6M9 15h4" />
-                                        </svg>
+                                        <span class="icon" inner_html=icons::EMPTY></span>
                                         <p>"暂无内容"</p>
                                         <p style="font-size: 13px; margin-top: 8px">"点击刷新按钮或从日历选择日期"</p>
                                     </div>
@@ -296,8 +297,8 @@ pub fn HomePage() -> impl IntoView {
 
         <CalendarModal
             is_open=calendar_open
-            episodes=episodes_list()
-            selected_date=selected_date.get()
+            episodes=episodes_signal
+            selected_date=selected_date
             on_select_date=Callback::new(move |date: String| {
                 set_selected_date.set(Some(date));
                 set_calendar_open.set(false);

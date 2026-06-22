@@ -1,4 +1,4 @@
-use crate::models::Story;
+use crate::{components::icons, models::Story};
 use leptos::prelude::*;
 
 /// Parse Markdown to HTML using marked.js (client only)
@@ -17,7 +17,6 @@ fn marked_parse(md: &str) -> String {
 
 #[cfg(feature = "ssr")]
 fn marked_parse(md: &str) -> String {
-    // SSR fallback: return raw markdown, client will re-render
     md.to_string()
 }
 
@@ -51,30 +50,14 @@ pub fn StoryCard(
                         disabled=move || read_stories.get().contains(&hn_id)
                         title="标为已读"
                     >
-                        {move || if read_stories.get().contains(&hn_id) {
-                            view! {
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="20 6 9 17 4 12"/>
-                                </svg>
-                            }.into_any()
-                        } else {
-                            view! {
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                                </svg>
-                            }.into_any()
-                        }}
+                        <span class="icon" inner_html=move || if read_stories.get().contains(&hn_id) { icons::CHECK } else { icons::BOOK }></span>
                     </button>
                     <button
                         class="regenerate-btn"
                         on:click=move |_| on_regenerate.run(hn_id)
                         title="重新生成摘要"
                     >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 12a9 9 0 11-2.636-6.364"/>
-                            <path d="M21 3v6h-6"/>
-                        </svg>
+                        <span class="icon" inner_html=icons::REFRESH_SMALL></span>
                     </button>
                 </div>
             </div>
