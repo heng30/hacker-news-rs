@@ -22,6 +22,12 @@ pub enum AppError {
     Internal(String),
 }
 
+impl From<std::string::FromUtf8Error> for AppError {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        AppError::Internal(e.to_string())
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {

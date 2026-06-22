@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 /// An episode groups stories by date
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,4 +90,12 @@ pub struct ConfigResponse {
     pub socks5_proxy: Option<String>,
     pub search_keywords: Option<String>,
     pub summary_concurrency: usize,
+}
+
+/// User preferences stored server-side
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPreferences {
+    pub theme: String,
+    pub show_unread: bool,
+    pub read_stories: HashSet<i64>,
 }

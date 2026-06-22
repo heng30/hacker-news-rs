@@ -56,6 +56,20 @@ pub async fn delete_all_stories() -> Result<usize, ServerFnError> {
 #[server]
 pub async fn delete_read_stories(hn_ids: Vec<i64>) -> Result<usize, ServerFnError> {
     let state = app_state()?;
-    crate::db::delete_stories_by_hn_ids(&state.db, &hn_ids)
-        .map_err(|e| ServerFnError::new(e.to_string()))
+    let ids = if hn_ids.is_empty() {
+        crate::db::get_read_stories(&state.db)
+            .map_err(|e| ServerFnError::new(e.to_string()))?
+            .into_iter()
+            .collect()
+    } else {
+        hn_ids
+    };
+
+    let count = crate::db::delete_stories_by_hn_ids(&state.db, &ids)
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Clear read stories from preferences since those stories are now deleted
+    crate::db::set_read_stories(&state.db, &std::collections::HashSet::new())
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(count)
 }

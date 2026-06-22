@@ -13,11 +13,17 @@ use tracing::{debug, info};
 const STORIES_TREE: &str = "stories";
 const EPISODES_TREE: &str = "episodes";
 const URL_HASHES_TREE: &str = "url_hashes";
+const PREFERENCES_TREE: &str = "preferences";
+
+const KEY_THEME: &str = "theme";
+const KEY_SHOW_UNREAD: &str = "show_unread";
+const KEY_READ_STORIES: &str = "read_stories";
 
 pub fn init_trees(db: &Db) -> Result<(), AppError> {
     db.open_tree(EPISODES_TREE)?;
     db.open_tree(STORIES_TREE)?;
     db.open_tree(URL_HASHES_TREE)?;
+    db.open_tree(PREFERENCES_TREE)?;
     db.flush()?;
     Ok(())
 }
@@ -256,4 +262,55 @@ pub fn blake3_hash(url: &str) -> String {
     let mut hasher = DefaultHasher::new();
     url.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
+}
+
+pub fn get_preference(db: &Arc<Db>, key: &str) -> Result<Option<String>, AppError> {
+    let tree = db.open_tree(PREFERENCES_TREE)?;
+    match tree.get(key)? {
+        Some(data) => Ok(Some(String::from_utf8(data.to_vec())?)),
+        None => Ok(None),
+    }
+}
+
+pub fn set_preference(db: &Arc<Db>, key: &str, value: &str) -> Result<(), AppError> {
+    let tree = db.open_tree(PREFERENCES_TREE)?;
+    tree.insert(key, value.as_bytes())?;
+    tree.flush()?;
+    Ok(())
+}
+
+pub fn get_read_stories(db: &Arc<Db>) -> Result<HashSet<i64>, AppError> {
+    match get_preference(db, KEY_READ_STORIES)? {
+        Some(json) => Ok(serde_json::from_str(&json)?),
+        None => Ok(HashSet::new()),
+    }
+}
+
+pub fn mark_story_read(db: &Arc<Db>, hn_id: i64) -> Result<HashSet<i64>, AppError> {
+    let mut reads = get_read_stories(db)?;
+    reads.insert(hn_id);
+    let json = serde_json::to_string(&reads)?;
+    set_preference(db, KEY_READ_STORIES, &json)?;
+    Ok(reads)
+}
+
+pub fn set_read_stories(db: &Arc<Db>, reads: &HashSet<i64>) -> Result<(), AppError> {
+    let json = serde_json::to_string(reads)?;
+    set_preference(db, KEY_READ_STORIES, &json)
+}
+
+pub fn get_theme(db: &Arc<Db>) -> Result<String, AppError> {
+    Ok(get_preference(db, KEY_THEME)?.unwrap_or_else(|| "light".to_string()))
+}
+
+pub fn set_theme(db: &Arc<Db>, theme: &str) -> Result<(), AppError> {
+    set_preference(db, KEY_THEME, theme)
+}
+
+pub fn get_show_unread(db: &Arc<Db>) -> Result<bool, AppError> {
+    Ok(get_preference(db, KEY_SHOW_UNREAD)? == Some("true".to_string()))
+}
+
+pub fn set_show_unread(db: &Arc<Db>, show: bool) -> Result<(), AppError> {
+    set_preference(db, KEY_SHOW_UNREAD, &show.to_string())
 }

@@ -1,6 +1,7 @@
 pub mod config;
 pub mod episodes;
 pub mod fetch;
+pub mod preferences;
 pub mod stories;
 
 #[cfg(feature = "ssr")]

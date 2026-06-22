@@ -7,63 +7,40 @@ use crate::{
     server_fns::{
         episodes::{get_episode_by_date, get_episodes, get_latest_episode},
         fetch::start_fetch,
+        preferences::{get_user_preferences, mark_story_read, set_show_unread, set_theme},
         stories::regenerate_summary,
     },
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use std::{cell::Cell, collections::HashSet, rc::Rc, time::Duration};
+use std::{cell::Cell, collections::HashSet, time::Duration};
 
 #[cfg(not(feature = "ssr"))]
 use crate::server_fns::stories::get_story;
 
 #[component]
 pub fn HomePage() -> impl IntoView {
-    let initial_dark = if !is_server() {
-        window()
-            .local_storage()
-            .ok()
-            .flatten()
-            .and_then(|ls| ls.get_item("hns-theme").ok().flatten())
-            .map(|v| v == "dark")
-            .unwrap_or(false)
-    } else {
-        false
-    };
-    let (is_dark, set_is_dark) = signal(initial_dark);
-
-    // Apply theme on mount (client only)
-    if initial_dark {
-        if let Some(html) = document().document_element() {
-            _ = html.set_attribute("data-theme", "dark");
-        }
-    }
-
+    let (is_dark, set_is_dark) = signal(false);
     let (show_only_unread, set_show_only_unread) = signal(false);
-
-    // Read stories (client-side)
     let (read_stories, set_read_stories) = signal(HashSet::<i64>::new());
 
-    // On client mount, restore persisted state from localStorage
-    // Using Effect ensures this runs after hydration is complete
+    let prefs_resource = Resource::new(
+        || (),
+        move |_| async move { get_user_preferences().await.ok() },
+    );
+
     Effect::new(move |_| {
-        if is_server() {
-            return;
-        }
+        if let Some(prefs) = prefs_resource.get().flatten() {
+            let is_dark_new = prefs.theme == "dark";
+            set_is_dark.set(is_dark_new);
+            set_show_only_unread.set(prefs.show_unread);
+            set_read_stories.set(prefs.read_stories);
 
-        let ls = window().local_storage().ok().flatten();
-
-        if let Some(ls) = ls {
-            if let Some(val) = ls.get_item("hns-show-unread").ok().flatten()
-                && val == "true"
+            if !is_server()
+                && is_dark_new
+                && let Some(html) = document().document_element()
             {
-                set_show_only_unread.set(true);
-            }
-
-            if let Some(json) = ls.get_item("hns-read-stories").ok().flatten()
-                && let Ok(reads) = serde_json::from_str::<HashSet<i64>>(&json)
-            {
-                set_read_stories.set(reads);
+                _ = html.set_attribute("data-theme", "dark");
             }
         }
     });
@@ -114,20 +91,20 @@ pub fn HomePage() -> impl IntoView {
         set_timeout(move || set_toast_visible.set(false), Duration::from_secs(3));
     };
 
-    // Theme toggle — persist to localStorage (client only)
     let toggle_theme = move || {
         let new_dark = !is_dark.get();
         set_is_dark.set(new_dark);
         let theme = if new_dark { "dark" } else { "light" };
-        if !is_server() {
-            if let Some(html) = document().document_element() {
-                _ = html.set_attribute("data-theme", theme);
-            }
 
-            if let Some(ls) = window().local_storage().ok().flatten() {
-                _ = ls.set_item("hns-theme", theme);
-            }
+        if !is_server()
+            && let Some(html) = document().document_element()
+        {
+            _ = html.set_attribute("data-theme", theme);
         }
+
+        spawn_local(async move {
+            _ = set_theme(theme.to_string()).await;
+        });
     };
 
     // Refresh / fetch stories
@@ -164,14 +141,13 @@ pub fn HomePage() -> impl IntoView {
     let mark_read = move |hn_id: i64| {
         let mut reads = read_stories.get();
         reads.insert(hn_id);
-        set_read_stories.set(reads.clone());
+        set_read_stories.set(reads);
 
-        if !is_server()
-            && let Some(ls) = window().local_storage().ok().flatten()
-            && let Ok(json) = serde_json::to_string(&reads)
-        {
-            _ = ls.set_item("hns-read-stories", &json);
-        }
+        spawn_local(async move {
+            if let Ok(updated) = mark_story_read(hn_id).await {
+                set_read_stories.set(updated);
+            }
+        });
     };
 
     let do_regenerate = move |hn_id: i64| {
@@ -192,7 +168,7 @@ pub fn HomePage() -> impl IntoView {
 
     // Auto-fetch on page load (client only, runs once)
     {
-        let fetched = Rc::new(Cell::new(false));
+        let fetched = Cell::new(false);
         Effect::new(move |_| {
             if !is_server() && !fetched.get() {
                 fetched.set(true);
@@ -233,9 +209,9 @@ pub fn HomePage() -> impl IntoView {
             on_toggle_read=Callback::new(move |_| {
                 let new_val = !show_only_unread.get();
                 set_show_only_unread.set(new_val);
-                if !is_server() && let Some(ls) = window().local_storage().ok().flatten() {
-                     _ = ls.set_item("hns-show-unread", &new_val.to_string());
-                }
+                spawn_local(async move {
+                    _ = set_show_unread(new_val).await;
+                });
             })
             on_calendar=Callback::new(move |_| set_calendar_open.set(true))
             on_toggle_theme=Callback::new(move |_| toggle_theme())
@@ -312,6 +288,7 @@ pub fn HomePage() -> impl IntoView {
             on_data_changed=Callback::new(move |_| {
                 episode_resource.refetch();
                 episodes_resource.refetch();
+                prefs_resource.refetch();
             })
         />
 
