@@ -1,29 +1,26 @@
-use std::collections::HashSet;
-
+use crate::{
+    components::{
+        calendar::CalendarModal, layout::Navbar, settings::SettingsModal, story_card::StoryCard,
+        toast::Toast,
+    },
+    models::{Episode, EpisodeWithStories, Story},
+    server_fns::{
+        episodes::{get_episode_by_date, get_episodes, get_latest_episode},
+        fetch::start_fetch,
+        stories::regenerate_summary,
+    },
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-
-use crate::components::calendar::CalendarModal;
-use crate::components::layout::Navbar;
-use crate::components::settings::SettingsModal;
-use crate::components::story_card::StoryCard;
-use crate::components::toast::Toast;
-use crate::models::Story;
-use crate::server_fns::episodes::{
-    get_episode_by_date, get_episodes, get_latest_episode,
-};
-use crate::server_fns::fetch::start_fetch;
-use crate::server_fns::stories::regenerate_summary;
+use std::{cell::Cell, collections::HashSet, rc::Rc, time::Duration};
 
 #[cfg(not(feature = "ssr"))]
 use crate::server_fns::stories::get_story;
 
-/// Main home page component
 #[component]
 pub fn HomePage() -> impl IntoView {
-    // Theme state — persist in localStorage (only on client)
-    let initial_dark = if !leptos::prelude::is_server() {
-        leptos::prelude::window()
+    let initial_dark = if !is_server() {
+        window()
             .local_storage()
             .ok()
             .flatten()
@@ -38,51 +35,43 @@ pub fn HomePage() -> impl IntoView {
     // Apply theme on mount (client only)
     if initial_dark {
         if let Some(html) = document().document_element() {
-            let _ = html.set_attribute("data-theme", "dark");
+            _ = html.set_attribute("data-theme", "dark");
         }
     }
-    // Show only unread stories
+
     let (show_only_unread, set_show_only_unread) = signal(false);
+
     // Read stories (client-side)
     let (read_stories, set_read_stories) = signal(HashSet::<i64>::new());
 
     // On client mount, restore persisted state from localStorage
     // Using Effect ensures this runs after hydration is complete
     Effect::new(move |_| {
-        if leptos::prelude::is_server() {
+        if is_server() {
             return;
         }
 
-        let ls = leptos::prelude::window()
-            .local_storage()
-            .ok()
-            .flatten();
+        let ls = window().local_storage().ok().flatten();
 
         if let Some(ls) = ls {
-            // Restore show_only_unread
-            if let Some(val) = ls.get_item("hns-show-unread").ok().flatten() {
-                if val == "true" {
-                    set_show_only_unread.set(true);
-                }
+            if let Some(val) = ls.get_item("hns-show-unread").ok().flatten()
+                && val == "true"
+            {
+                set_show_only_unread.set(true);
             }
 
-            // Restore read_stories
-            if let Some(json) = ls.get_item("hns-read-stories").ok().flatten() {
-                if let Ok(reads) = serde_json::from_str::<HashSet<i64>>(&json) {
-                    set_read_stories.set(reads);
-                }
+            if let Some(json) = ls.get_item("hns-read-stories").ok().flatten()
+                && let Ok(reads) = serde_json::from_str::<HashSet<i64>>(&json)
+            {
+                set_read_stories.set(reads);
             }
         }
     });
-    // Currently selected date
+
     let (selected_date, set_selected_date) = signal(None::<String>);
-    // Calendar modal
     let (calendar_open, set_calendar_open) = signal(false);
-    // Settings modal
     let (settings_open, set_settings_open) = signal(false);
-    // Fetching state
     let (is_fetching, set_is_fetching) = signal(false);
-    // Toast
     let (toast_msg, set_toast_msg) = signal(String::new());
     let (toast_type, set_toast_type) = signal(String::new());
     let (toast_visible, set_toast_visible) = signal(false);
@@ -90,7 +79,6 @@ pub fn HomePage() -> impl IntoView {
     // Signal-based story list — updated incrementally via SSE, no full refetch
     let (stories_signal, set_stories) = signal(Vec::<Story>::new());
 
-    // Current episode data (used for initial load and date changes)
     let episode_resource = Resource::new(
         move || selected_date.get(),
         move |date| async move {
@@ -101,7 +89,6 @@ pub fn HomePage() -> impl IntoView {
         },
     );
 
-    // When episode resource resolves, update the local stories signal
     Effect::new(move |_| {
         if let Some(data) = episode_resource.get().flatten() {
             set_stories.set(data.stories);
@@ -114,15 +101,11 @@ pub fn HomePage() -> impl IntoView {
         move |_| async move { get_episodes().await.ok().unwrap_or_default() },
     );
 
-    // Toast helper
     let show_toast = move |msg: String, t: String| {
         set_toast_msg.set(msg);
         set_toast_type.set(t);
         set_toast_visible.set(true);
-        set_timeout(
-            move || set_toast_visible.set(false),
-            std::time::Duration::from_secs(3),
-        );
+        set_timeout(move || set_toast_visible.set(false), Duration::from_secs(3));
     };
 
     // Theme toggle — persist to localStorage (client only)
@@ -130,12 +113,13 @@ pub fn HomePage() -> impl IntoView {
         let new_dark = !is_dark.get();
         set_is_dark.set(new_dark);
         let theme = if new_dark { "dark" } else { "light" };
-        if !leptos::prelude::is_server() {
+        if !is_server() {
             if let Some(html) = document().document_element() {
-                let _ = html.set_attribute("data-theme", theme);
+                _ = html.set_attribute("data-theme", theme);
             }
-            if let Some(ls) = leptos::prelude::window().local_storage().ok().flatten() {
-                let _ = ls.set_item("hns-theme", theme);
+
+            if let Some(ls) = window().local_storage().ok().flatten() {
+                _ = ls.set_item("hns-theme", theme);
             }
         }
     };
@@ -150,12 +134,6 @@ pub fn HomePage() -> impl IntoView {
             "正在从 Hacker News 获取故事...".to_string(),
             "loading".to_string(),
         );
-
-        let episode_resource = episode_resource;
-        let episodes_resource = episodes_resource;
-        let set_is_fetching = set_is_fetching;
-        let set_stories = set_stories;
-        let show_toast = show_toast;
 
         spawn_local(async move {
             match start_fetch().await {
@@ -177,58 +155,52 @@ pub fn HomePage() -> impl IntoView {
         });
     };
 
-    // Mark story as read — persist to localStorage
     let mark_read = move |hn_id: i64| {
         let mut reads = read_stories.get();
         reads.insert(hn_id);
         set_read_stories.set(reads.clone());
-        if !leptos::prelude::is_server() {
-            if let Some(ls) = leptos::prelude::window().local_storage().ok().flatten() {
-                if let Ok(json) = serde_json::to_string(&reads) {
-                    let _ = ls.set_item("hns-read-stories", &json);
-                }
-            }
+
+        if !is_server()
+            && let Some(ls) = window().local_storage().ok().flatten()
+            && let Ok(json) = serde_json::to_string(&reads)
+        {
+            _ = ls.set_item("hns-read-stories", &json);
         }
     };
 
-    // Regenerate summary — update only the affected story
     let do_regenerate = move |hn_id: i64| {
         let set_stories = set_stories;
         spawn_local(async move {
             match regenerate_summary(hn_id).await {
                 Ok(updated) => {
-                    // Update only this story in the signal
                     set_stories.update(|stories| {
                         if let Some(s) = stories.iter_mut().find(|s| s.hn_id == hn_id) {
                             *s = updated;
                         }
                     });
                 }
-                Err(e) => {
-                    show_toast(format!("错误: {}", e), "error".to_string());
-                }
+                Err(e) => show_toast(format!("错误: {}", e), "error".to_string()),
             }
         });
     };
 
     // Auto-fetch on page load (client only, runs once)
     {
-        let fetched = std::rc::Rc::new(std::cell::Cell::new(false));
+        let fetched = Rc::new(Cell::new(false));
         Effect::new(move |_| {
-            if !leptos::prelude::is_server() && !fetched.get() {
+            if !is_server() && !fetched.get() {
                 fetched.set(true);
                 do_fetch();
             }
         });
     }
 
-    // Filter and sort stories from the local signal
     let display_stories = move || {
         let stories = stories_signal.get();
         let reads = read_stories.get();
         let show_unread = show_only_unread.get();
 
-        let unclicked: Vec<Story> = stories
+        let mut unclicked: Vec<Story> = stories
             .iter()
             .filter(|s| !reads.contains(&s.hn_id))
             .cloned()
@@ -242,15 +214,12 @@ pub fn HomePage() -> impl IntoView {
         if show_unread {
             unclicked
         } else {
-            let mut result = unclicked;
-            result.extend(clicked);
-            result
+            unclicked.extend(clicked);
+            unclicked
         }
     };
 
-    let episodes_list = move || {
-        episodes_resource.get().unwrap_or_default()
-    };
+    let episodes_list = move || episodes_resource.get().unwrap_or_default();
 
     view! {
         <Navbar
@@ -260,10 +229,8 @@ pub fn HomePage() -> impl IntoView {
             on_toggle_read=Callback::new(move |_| {
                 let new_val = !show_only_unread.get();
                 set_show_only_unread.set(new_val);
-                if !leptos::prelude::is_server() {
-                    if let Some(ls) = leptos::prelude::window().local_storage().ok().flatten() {
-                        let _ = ls.set_item("hns-show-unread", &new_val.to_string());
-                    }
+                if !is_server() && let Some(ls) = window().local_storage().ok().flatten() {
+                     _ = ls.set_item("hns-show-unread", &new_val.to_string());
                 }
             })
             on_calendar=Callback::new(move |_| set_calendar_open.set(true))
@@ -359,14 +326,13 @@ pub fn HomePage() -> impl IntoView {
 /// Uses incremental updates — only fetches the changed story, not the whole list
 #[cfg(not(feature = "ssr"))]
 fn listen_fetch_events(
-    episode_resource: Resource<Option<crate::models::EpisodeWithStories>>,
-    episodes_resource: Resource<Vec<crate::models::Episode>>,
+    episode_resource: Resource<Option<EpisodeWithStories>>,
+    episodes_resource: Resource<Vec<Episode>>,
     set_is_fetching: WriteSignal<bool>,
-    set_stories: WriteSignal<Vec<crate::models::Story>>,
+    set_stories: WriteSignal<Vec<Story>>,
     show_toast: impl Fn(String, String) + 'static,
 ) {
-    use wasm_bindgen::closure::Closure;
-    use wasm_bindgen::JsCast;
+    use wasm_bindgen::{JsCast, closure::Closure};
 
     let es = web_sys::EventSource::new("/api/fetch-events").unwrap();
 
@@ -405,7 +371,9 @@ fn listen_fetch_events(
                     }
                     crate::models::FetchEvent::SummaryError { hn_id } => {
                         // Just log to console, no UI update needed for errors
-                        web_sys::console::log_1(&format!("Summary generation failed for story {}", hn_id).into());
+                        web_sys::console::log_1(
+                            &format!("Summary generation failed for story {}", hn_id).into(),
+                        );
                     }
                     crate::models::FetchEvent::Finished { summaries, .. } => {
                         set_is_fetching.set(false);
@@ -442,10 +410,10 @@ fn listen_fetch_events(
 /// SSR stub — SSE listening only works on the client
 #[cfg(feature = "ssr")]
 fn listen_fetch_events(
-    _episode_resource: Resource<Option<crate::models::EpisodeWithStories>>,
-    _episodes_resource: Resource<Vec<crate::models::Episode>>,
+    _episode_resource: Resource<Option<EpisodeWithStories>>,
+    _episodes_resource: Resource<Vec<Episode>>,
     _set_is_fetching: WriteSignal<bool>,
-    _set_stories: WriteSignal<Vec<crate::models::Story>>,
+    _set_stories: WriteSignal<Vec<Story>>,
     _show_toast: impl Fn(String, String) + 'static,
 ) {
     // No-op on server

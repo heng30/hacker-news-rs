@@ -1,10 +1,9 @@
-use leptos::prelude::*;
-use leptos::task::spawn_local;
+use crate::server_fns::{
+    config::get_config,
+    stories::{delete_all_stories, delete_read_stories},
+};
+use leptos::{prelude::*, task::spawn_local};
 
-use crate::server_fns::config::get_config;
-use crate::server_fns::stories::{delete_all_stories, delete_read_stories};
-
-/// Settings modal component
 #[component]
 pub fn SettingsModal(
     is_open: ReadSignal<bool>,

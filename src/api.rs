@@ -38,6 +38,23 @@ impl From<HnStoryRaw> for HnStory {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct AlgoliaSearchResponse {
+    hits: Vec<AlgoliaHit>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct AlgoliaHit {
+    #[serde(rename = "objectID")]
+    object_id: String,
+    title: String,
+    url: Option<String>,
+    author: String,
+    points: i64,
+    created_at_i: i64,
+}
+
 impl HnClient {
     pub async fn fetch_top_stories(&self) -> Result<Vec<i64>> {
         let url = format!("{}/topstories.json", HN_API_BASE);
@@ -83,7 +100,11 @@ impl HnClient {
                 let id: i64 = match hit.object_id.parse() {
                     Ok(id) => id,
                     Err(e) => {
-                        tracing::warn!("Skipping hit with non-numeric objectID '{}': {}", hit.object_id, e);
+                        tracing::warn!(
+                            "Skipping hit with non-numeric objectID '{}': {}",
+                            hit.object_id,
+                            e
+                        );
                         return None;
                     }
                 };
@@ -102,21 +123,4 @@ impl HnClient {
         tracing::info!("Algolia returned {} hits for '{}'", stories.len(), keyword);
         Ok(stories)
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct AlgoliaSearchResponse {
-    hits: Vec<AlgoliaHit>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-struct AlgoliaHit {
-    #[serde(rename = "objectID")]
-    object_id: String,
-    title: String,
-    url: Option<String>,
-    author: String,
-    points: i64,
-    created_at_i: i64,
 }

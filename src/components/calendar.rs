@@ -92,8 +92,8 @@ pub fn CalendarModal(
         }
 
         // Next month days
-        let last_day = chrono::NaiveDate::from_ymd_opt(year, month, days_in_month)
-            .unwrap_or(first_day);
+        let last_day =
+            chrono::NaiveDate::from_ymd_opt(year, month, days_in_month).unwrap_or(first_day);
         let end_weekday = last_day.weekday().num_days_from_sunday();
         if end_weekday < 6 {
             for i in 1..(7 - end_weekday) {

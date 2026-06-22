@@ -4,7 +4,7 @@ use crate::{
 };
 use sled::Db;
 use std::{
-    collections::hash_map::DefaultHasher,
+    collections::{HashSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
     sync::Arc,
 };
@@ -90,14 +90,10 @@ pub fn get_episodes(db: &Arc<Db>) -> Result<Vec<Episode>, AppError> {
     Ok(episodes)
 }
 
-// ── Story operations ────────────────────────────────────────────────
-
-/// Generate a composite key for a story in the stories tree
 fn story_key(episode_date: &str, hn_id: i64) -> String {
     format!("{}:{}", episode_date, hn_id)
 }
 
-/// Save a story to the database
 pub fn save_story(db: &Arc<Db>, story: &Story) -> Result<(), AppError> {
     let tree = db.open_tree(STORIES_TREE)?;
     let key = story_key(&story.episode_date, story.hn_id);
@@ -109,7 +105,6 @@ pub fn save_story(db: &Arc<Db>, story: &Story) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Get all stories for an episode
 pub fn get_stories_by_episode(db: &Arc<Db>, episode_date: &str) -> Result<Vec<Story>, AppError> {
     let tree = db.open_tree(STORIES_TREE)?;
     let prefix = format!("{}:", episode_date);
@@ -126,7 +121,6 @@ pub fn get_stories_by_episode(db: &Arc<Db>, episode_date: &str) -> Result<Vec<St
     Ok(stories)
 }
 
-/// Get a story by hn_id
 pub fn get_story_by_hn_id(db: &Arc<Db>, hn_id: i64) -> Result<Option<Story>, AppError> {
     let tree = db.open_tree(STORIES_TREE)?;
 
@@ -142,7 +136,6 @@ pub fn get_story_by_hn_id(db: &Arc<Db>, hn_id: i64) -> Result<Option<Story>, App
     Ok(None)
 }
 
-/// Update a story's summary
 pub fn update_story_summary(
     db: &Arc<Db>,
     episode_date: &str,
@@ -172,7 +165,6 @@ pub fn update_story_summary(
     Ok(story)
 }
 
-/// Delete all stories
 pub fn delete_all_stories(db: &Arc<Db>) -> Result<usize, AppError> {
     let tree = db.open_tree(STORIES_TREE)?;
     let count = tree.len();
@@ -188,7 +180,6 @@ pub fn delete_all_stories(db: &Arc<Db>) -> Result<usize, AppError> {
     Ok(count)
 }
 
-/// Delete stories by their hn_ids
 pub fn delete_stories_by_hn_ids(db: &Arc<Db>, hn_ids: &[i64]) -> Result<usize, AppError> {
     let tree = db.open_tree(STORIES_TREE)?;
     let hn_id_set: std::collections::HashSet<i64> = hn_ids.iter().copied().collect();
@@ -214,7 +205,6 @@ pub fn delete_stories_by_hn_ids(db: &Arc<Db>, hn_ids: &[i64]) -> Result<usize, A
     Ok(deleted)
 }
 
-/// Get an episode with its stories
 pub fn get_episode_with_stories(
     db: &Arc<Db>,
     date: &str,
@@ -224,8 +214,7 @@ pub fn get_episode_with_stories(
     match episode {
         Some(episode) => {
             let stories = get_stories_by_episode(db, date)?;
-            // Deduplicate stories by hn_id
-            let mut seen = std::collections::HashSet::new();
+            let mut seen = HashSet::new();
             let stories = stories
                 .into_iter()
                 .filter(|s| {

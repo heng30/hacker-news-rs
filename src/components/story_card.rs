@@ -1,6 +1,5 @@
-use leptos::prelude::*;
-
 use crate::models::Story;
+use leptos::prelude::*;
 
 /// Parse Markdown to HTML using marked.js (client only)
 #[cfg(not(feature = "ssr"))]
@@ -22,9 +21,6 @@ fn marked_parse(md: &str) -> String {
     md.to_string()
 }
 
-/// Render a single story card
-/// Uses a signal for the story so that updates (e.g. summary) only re-render this card,
-/// not the entire list — preserving scroll position.
 #[component]
 pub fn StoryCard(
     story: Story,
@@ -34,14 +30,7 @@ pub fn StoryCard(
     on_regenerate: Callback<i64>,
 ) -> impl IntoView {
     let hn_id = story.hn_id;
-    // Keep story in a local signal so summary updates only re-render this card
     let (story_sig, _) = signal(story);
-
-    // Listen for story updates from the parent — when the parent's signal
-    // changes this story, we receive the updated version via a context or
-    // we rely on the key-based reconciliation. Since we use hn_id as a stable
-    // key, Leptos will reuse the component. We store the latest story in a
-    // local signal that the view reacts to.
     let title = move || story_sig.get().title;
     let url = move || story_sig.get().url.clone().unwrap_or_default();
     let by = move || story_sig.get().by;
@@ -111,7 +100,7 @@ pub fn StoryCard(
 
                 if has_summary && !display_summary.is_empty() {
                     // Render Markdown to HTML via marked.js (client only)
-                    let html = if !leptos::prelude::is_server() {
+                    let html = if !is_server() {
                         marked_parse(&display_summary)
                     } else {
                         display_summary

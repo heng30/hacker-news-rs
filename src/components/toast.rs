@@ -1,6 +1,5 @@
 use leptos::prelude::*;
 
-/// Toast notification component
 #[component]
 pub fn Toast(
     message: ReadSignal<String>,

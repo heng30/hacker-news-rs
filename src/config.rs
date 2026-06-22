@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
-
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 
 /// Hacker News RSS Generator with AI Summaries
 #[derive(Parser, Debug, Clone)]
@@ -71,7 +70,6 @@ pub struct Args {
     pub max_content_length: u32,
 }
 
-/// Resolved application configuration (after clap parsing)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub host: String,
@@ -93,7 +91,6 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    /// Build AppConfig from parsed clap Args, resolving db_path to platform default if not specified
     pub fn from_args(args: &Args, db_path: String) -> Self {
         let search_keywords = args
             .search_keywords
@@ -134,7 +131,6 @@ impl AppConfig {
         }
     }
 
-    /// Resolve database path: use --db arg, or platform default
     pub fn resolve_db_path(args_db: &Option<String>, app_name: &str) -> String {
         if let Some(path) = args_db {
             return path.clone();
@@ -149,7 +145,6 @@ impl AppConfig {
             .to_string()
     }
 
-    /// Mask API key for display
     pub fn masked_api_key(&self) -> String {
         mask_sensitive_value(&self.api_key)
     }

@@ -19,11 +19,14 @@ pub async fn static_handler(req: Request<Body>) -> impl IntoResponse {
     // Try pkg assets first (hns.js, hns.wasm, hns.css)
     if path.starts_with("pkg/") {
         let pkg_path = path.trim_start_matches("pkg/");
+
         // wasm-bindgen JS references *_bg.wasm but the file is named *.wasm
         let asset = PkgAssets::get(pkg_path).or_else(|| {
-            pkg_path.strip_suffix("_bg.wasm")
+            pkg_path
+                .strip_suffix("_bg.wasm")
                 .and_then(|name| PkgAssets::get(&format!("{}.wasm", name)))
         });
+
         match asset {
             Some(asset) => {
                 let mime = mime_guess::from_path(pkg_path)
@@ -56,11 +59,9 @@ pub async fn static_handler(req: Request<Body>) -> impl IntoResponse {
                 .as_ref()
                 .to_string();
             let body = Body::from(asset.data.into_owned());
-            // CSS and other public assets should not be aggressively cached
-            // so updates are visible after rebuild
             let headers = [
                 (header::CONTENT_TYPE, mime),
-                (header::CACHE_CONTROL, "no-cache".to_string()),
+                (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
             ];
             (StatusCode::OK, headers, body).into_response()
         }

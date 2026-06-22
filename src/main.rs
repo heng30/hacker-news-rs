@@ -268,9 +268,15 @@ mod ssr {
             .filter(|s| s.score >= min_score)
             .collect();
 
-        tracing::debug!("Auto-update: {} new stories to process", stories.len());
+        let total_stories = stories.len();
+        tracing::debug!("Auto-update: {} new stories to process", total_stories);
 
         if stories.is_empty() {
+            _ = state.fetch_events.send(FetchEvent::Finished {
+                total: 0,
+                summaries: 0,
+                errors: 0,
+            });
             return Ok(0);
         }
 
@@ -282,17 +288,20 @@ mod ssr {
             story.episode_date = today.clone();
             db::save_story(&state.db, &story)?;
 
-            // 这里不是标记为已读，而是标记为已经存在，用于去重
             let url_key = story.url.as_deref().unwrap_or(&story.title);
             _ = db::mark_url_seen(&state.db, url_key);
 
             if let Some(s) = db::get_story_by_hn_id(&state.db, story.hn_id)? {
                 saved.push(s);
+                _ = state
+                    .fetch_events
+                    .send(FetchEvent::StoryAdded { hn_id: story.hn_id });
             }
         }
 
+        let mut errors_count = 0usize;
+        let mut summaries_count = 0usize;
         let concurrency = state.config.summary_concurrency;
-        let mut count = 0;
 
         for chunk in saved.chunks(concurrency) {
             let futures: Vec<_> = chunk
@@ -314,7 +323,7 @@ mod ssr {
                                     story_clone.hn_id,
                                     summary.as_deref(),
                                 );
-                                true
+                                Ok(story_clone.hn_id)
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -322,7 +331,7 @@ mod ssr {
                                     story_clone.hn_id,
                                     e
                                 );
-                                false
+                                Err(story_clone.hn_id)
                             }
                         }
                     }
@@ -330,9 +339,31 @@ mod ssr {
                 .collect();
 
             let results = futures::future::join_all(futures).await;
-            count += results.iter().filter(|&&r| r).count();
+
+            for result in &results {
+                match result {
+                    Ok(hn_id) => {
+                        summaries_count += 1;
+                        _ = state
+                            .fetch_events
+                            .send(FetchEvent::SummaryDone { hn_id: *hn_id });
+                    }
+                    Err(hn_id) => {
+                        errors_count += 1;
+                        _ = state
+                            .fetch_events
+                            .send(FetchEvent::SummaryError { hn_id: *hn_id });
+                    }
+                }
+            }
         }
 
-        Ok(count)
+        _ = state.fetch_events.send(FetchEvent::Finished {
+            total: total_stories,
+            summaries: summaries_count,
+            errors: errors_count,
+        });
+
+        Ok(summaries_count)
     }
 }

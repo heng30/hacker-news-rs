@@ -72,7 +72,11 @@ pub enum FetchEvent {
     /// A summary generation failed
     SummaryError { hn_id: i64 },
     /// All fetch and summary work is complete
-    Finished { total: usize, summaries: usize, errors: usize },
+    Finished {
+        total: usize,
+        summaries: usize,
+        errors: usize,
+    },
 }
 
 /// Config response for the settings modal
