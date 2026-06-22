@@ -13,7 +13,7 @@ use crate::{
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use std::{cell::Cell, collections::HashSet, time::Duration};
+use std::{collections::HashSet, time::Duration};
 
 #[cfg(not(feature = "ssr"))]
 use crate::server_fns::stories::get_story;
@@ -52,8 +52,6 @@ pub fn HomePage() -> impl IntoView {
     let (toast_msg, set_toast_msg) = signal(String::new());
     let (toast_type, set_toast_type) = signal(String::new());
     let (toast_visible, set_toast_visible) = signal(false);
-
-    // Signal-based story list — updated incrementally via SSE, no full refetch
     let (stories_signal, set_stories) = signal(Vec::<Story>::new());
 
     let episode_resource = Resource::new(
@@ -166,17 +164,6 @@ pub fn HomePage() -> impl IntoView {
         });
     };
 
-    // Auto-fetch on page load (client only, runs once)
-    {
-        let fetched = Cell::new(false);
-        Effect::new(move |_| {
-            if !is_server() && !fetched.get() {
-                fetched.set(true);
-                do_fetch();
-            }
-        });
-    }
-
     let display_stories = move || {
         let stories = stories_signal.get();
         let reads = read_stories.get();
@@ -200,6 +187,10 @@ pub fn HomePage() -> impl IntoView {
             unclicked
         }
     };
+
+    if !is_server() {
+        do_fetch();
+    }
 
     view! {
         <Navbar
