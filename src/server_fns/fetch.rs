@@ -88,6 +88,25 @@ mod ssr {
         let search_stories = if let Some(keywords) = &config.search_keywords {
             let mut stories = Vec::new();
             for kw in keywords {
+                // hnrss.org RSS/Atom search
+                match hn_client.search_by_rss(kw).await {
+                    Ok(s) => {
+                        let filtered: Vec<_> = s
+                            .into_iter()
+                            .filter(|s| {
+                                let url_key = s.url.as_deref().unwrap_or(&s.title);
+                                let hash = crate::db::blake3_hash(url_key);
+                                !existing_urls.contains(&hash)
+                            })
+                            .collect();
+                        stories.extend(filtered);
+                    }
+                    Err(e) => {
+                        tracing::warn!("hnrss.org search failed for '{}': {}", kw, e);
+                    }
+                }
+
+                // Algolia search
                 match hn_client.search_by_keyword(kw).await {
                     Ok(s) => {
                         let filtered: Vec<_> = s
@@ -101,8 +120,7 @@ mod ssr {
                         stories.extend(filtered);
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to search for '{}': {}. Skipping.", kw, e);
-                        continue;
+                        tracing::warn!("Algolia search failed for '{}': {}", kw, e);
                     }
                 }
             }

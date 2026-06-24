@@ -1,7 +1,9 @@
 use crate::models::HnStory;
 use anyhow::Result;
 use serde::Deserialize;
+use std::io::BufReader;
 
+const HNRSS_BASE: &str = "https://hnrss.org/newest";
 const HN_API_BASE: &str = "https://hacker-news.firebaseio.com/v0";
 
 pub struct HnClient {
@@ -123,6 +125,62 @@ impl HnClient {
             .collect();
 
         tracing::info!("Algolia returned {} hits for '{}'", stories.len(), keyword);
+        Ok(stories)
+    }
+
+    /// Search stories by keyword using hnrss.org RSS feed
+    pub async fn search_by_rss(&self, keyword: &str) -> Result<Vec<HnStory>> {
+        let url = format!("{}?q={}", HNRSS_BASE, keyword);
+        tracing::info!("Searching hnrss.org for keyword '{}'", keyword);
+
+        let response = self.client.get(&url).send().await?;
+        let body = response.text().await?;
+
+        let stories = Self::parse_rss(&body, keyword)?;
+        tracing::info!(
+            "hnrss.org returned {} RSS items for '{}'",
+            stories.len(),
+            keyword
+        );
+
+        Ok(stories)
+    }
+
+    fn parse_rss(body: &str, keyword: &str) -> Result<Vec<HnStory>> {
+        let channel = rss::Channel::read_from(BufReader::new(body.as_bytes()))?;
+        let stories = channel
+            .items
+            .into_iter()
+            .filter_map(|item| {
+                // <comments> contains the HN link with id, e.g. "https://news.ycombinator.com/item?id=48654862"
+                let comments = item.comments.as_deref()?;
+                let hn_id: i64 = comments
+                    .rsplit_once('=')
+                    .and_then(|(_, id)| id.parse().ok())?;
+                // <link> is the external article URL
+                let url = item.link;
+                // <pubDate> is RFC 2822 format
+                let time = item
+                    .pub_date
+                    .as_deref()
+                    .and_then(|d| chrono::DateTime::parse_from_rfc2822(d).ok())
+                    .map(|dt| dt.timestamp())
+                    .unwrap_or(0);
+                Some(HnStory {
+                    id: hn_id,
+                    title: item.title.unwrap_or_default(),
+                    url,
+                    by: item
+                        .dublin_core_ext
+                        .as_ref()
+                        .and_then(|dc| dc.creators.first().cloned())
+                        .unwrap_or_default(),
+                    score: 0,
+                    time,
+                    tag: keyword.to_string(),
+                })
+            })
+            .collect();
         Ok(stories)
     }
 }

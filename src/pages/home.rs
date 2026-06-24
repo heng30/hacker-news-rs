@@ -164,6 +164,10 @@ pub fn HomePage() -> impl IntoView {
         });
     };
 
+    let do_copy = move |msg: String| {
+        show_toast(msg, "success".to_string());
+    };
+
     let display_stories = move || {
         let stories = stories_signal.get();
         let reads = read_stories.get();
@@ -249,6 +253,7 @@ pub fn HomePage() -> impl IntoView {
                                                         read_stories=read_stories
                                                         on_mark_read=Callback::new(move |id| mark_read(id))
                                                         on_regenerate=Callback::new(move |id| do_regenerate(id))
+                                                        on_copy=Callback::new(move |msg| do_copy(msg))
                                                     />
                                                 }
                                             }
