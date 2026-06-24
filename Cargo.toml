@@ -27,6 +27,7 @@ log = { version = "0.4", optional = true }
 anyhow = { version = "1", optional = true }
 axum = { version = "0.8", optional = true }
 sled = { version = "0.34", optional = true }
+js-sys = { version = "0.3", optional = true }
 thiserror = { version = "2", optional = true }
 tracing = { version = "0.1", optional = true }
 futures = { version = "0.3", optional = true }
@@ -34,15 +35,16 @@ dashmap = { version = "6.1", optional = true }
 rust-embed = { version = "8", optional = true }
 mime_guess = { version = "2", optional = true }
 scraper = { version = "0.27", optional = true }
-wasm-bindgen = { version = "0.2", optional = true }
 leptos_axum = { version = "0.8", optional = true }
-tokio-stream = { version = "0.1", features = ["sync"], optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
 platform-dirs = { version = "0.3", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 server_fn = { version = "0.8", features = ["axum"], optional = true }
 clap = { version = "4", features = ["derive", "env"], optional = true }
+tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 tower-http = { version = "0.7", features = ["cors", "fs"], optional = true }
 
 tracing-subscriber = { version = "0.3", features = [
@@ -81,7 +83,13 @@ tokio-rustls = { version = "0.26", default-features = false, features = [
 
 [features]
 default = ["ssr"]
-hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen"]
+hydrate = [
+  "leptos/hydrate",
+  "dep:console_error_panic_hook",
+  "dep:wasm-bindgen",
+  "dep:js-sys",
+  "dep:wasm-bindgen-futures",
+]
 ssr = [
   "dep:axum",
   "dep:tokio",

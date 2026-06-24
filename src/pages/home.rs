@@ -53,6 +53,7 @@ pub fn HomePage() -> impl IntoView {
     let (toast_type, set_toast_type) = signal(String::new());
     let (toast_visible, set_toast_visible) = signal(false);
     let (stories_signal, set_stories) = signal(Vec::<Story>::new());
+    let (active_es, set_active_es) = signal(None::<web_sys::EventSource>);
 
     let episode_resource = Resource::new(
         move || selected_date.get(),
@@ -107,9 +108,12 @@ pub fn HomePage() -> impl IntoView {
 
     // Refresh / fetch stories
     let do_fetch = move || {
-        if is_fetching.get() {
-            return;
+        // Close any existing SSE connection before starting a new one
+        if let Some(es) = active_es.get() {
+            es.close();
+            set_active_es.set(None);
         }
+
         set_is_fetching.set(true);
         show_toast(
             "正在从 Hacker News 获取故事...".to_string(),
@@ -126,6 +130,7 @@ pub fn HomePage() -> impl IntoView {
                         set_is_fetching,
                         set_stories,
                         show_toast,
+                        set_active_es,
                     );
                 }
                 Err(e) => {
@@ -305,13 +310,16 @@ fn listen_fetch_events(
     set_is_fetching: WriteSignal<bool>,
     set_stories: WriteSignal<Vec<Story>>,
     show_toast: impl Fn(String, String) + 'static,
+    set_active_es: WriteSignal<Option<web_sys::EventSource>>,
 ) {
     use wasm_bindgen::{JsCast, closure::Closure};
 
     let es = web_sys::EventSource::new("/api/fetch-events").unwrap();
+    set_active_es.set(Some(es.clone()));
 
     let on_message = {
         let es = es.clone();
+        let set_active_es = set_active_es;
         Closure::<dyn Fn(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
             let data = e.data().as_string().unwrap_or_default();
             if let Ok(event) = serde_json::from_str::<crate::models::FetchEvent>(&data) {
@@ -360,6 +368,7 @@ fn listen_fetch_events(
                         );
                         // Close the EventSource after finished
                         es.close();
+                        set_active_es.set(None);
                     }
                 }
             }
@@ -368,10 +377,11 @@ fn listen_fetch_events(
 
     let on_error = {
         let es = es.clone();
+        let set_active_es = set_active_es;
         Closure::<dyn Fn(web_sys::Event)>::new(move |_: web_sys::Event| {
-            if es.ready_state() == web_sys::EventSource::CLOSED {
-                set_is_fetching.set(false);
-            }
+            set_is_fetching.set(false);
+            set_active_es.set(None);
+            es.close();
         })
     };
 
@@ -389,6 +399,7 @@ fn listen_fetch_events(
     _set_is_fetching: WriteSignal<bool>,
     _set_stories: WriteSignal<Vec<Story>>,
     _show_toast: impl Fn(String, String) + 'static,
+    _set_active_es: WriteSignal<Option<web_sys::EventSource>>,
 ) {
     // No-op on server
 }

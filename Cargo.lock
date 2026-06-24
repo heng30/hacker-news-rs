@@ -1106,6 +1106,7 @@ dependencies = [
  "dashmap",
  "futures",
  "hyper-rustls",
+ "js-sys",
  "leptos",
  "leptos_axum",
  "leptos_meta",
@@ -1131,6 +1132,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 

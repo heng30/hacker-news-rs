@@ -171,12 +171,49 @@ mod ssr {
             }
         }
 
-        // Generate summaries in batches, emit event for each completed summary
+        // Generate summaries for new stories
         let concurrency = config.summary_concurrency;
         let mut summaries_count = 0usize;
         let mut errors_count = 0usize;
 
-        for chunk in saved_stories.chunks(concurrency) {
+        let (s, e) =
+            generate_summaries(&db, &llm_client, &saved_stories, concurrency, &event_tx).await;
+        summaries_count += s;
+        errors_count += e;
+
+        // Regenerate summaries for unread stories that are missing summaries
+        let (s, e) =
+            backfill_missing_summaries(&db, &llm_client, &episode.date, concurrency, &event_tx)
+                .await;
+        summaries_count += s;
+        errors_count += e;
+
+        _ = event_tx.send(FetchEvent::Finished {
+            total: total_stories,
+            summaries: summaries_count,
+            errors: errors_count,
+        });
+
+        tracing::info!(
+            "Fetch completed: {} summaries, {} errors",
+            summaries_count,
+            errors_count
+        );
+        Ok(())
+    }
+
+    /// Generate summaries for a list of stories in batches
+    async fn generate_summaries(
+        db: &Arc<sled::Db>,
+        llm_client: &LlmClient,
+        stories: &[Story],
+        concurrency: usize,
+        event_tx: &Sender<FetchEvent>,
+    ) -> (usize, usize) {
+        let mut summaries_count = 0usize;
+        let mut errors_count = 0usize;
+
+        for chunk in stories.chunks(concurrency) {
             let futures: Vec<_> = chunk
                 .iter()
                 .map(|story| {
@@ -223,17 +260,48 @@ mod ssr {
             }
         }
 
-        _ = event_tx.send(FetchEvent::Finished {
-            total: total_stories,
-            summaries: summaries_count,
-            errors: errors_count,
-        });
+        (summaries_count, errors_count)
+    }
+
+    /// Generate summaries for unread stories that are missing summaries
+    async fn backfill_missing_summaries(
+        db: &Arc<sled::Db>,
+        llm_client: &LlmClient,
+        episode_date: &str,
+        concurrency: usize,
+        event_tx: &Sender<FetchEvent>,
+    ) -> (usize, usize) {
+        let read_stories = match crate::db::get_read_stories(db) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("Failed to get read stories: {}", e);
+                return (0, 0);
+            }
+        };
+
+        let all_stories = match crate::db::get_stories_by_episode(db, episode_date) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("Failed to get episode stories: {}", e);
+                return (0, 0);
+            }
+        };
+
+        let missing: Vec<Story> = all_stories
+            .into_iter()
+            .filter(|s| !read_stories.contains(&s.hn_id))
+            .filter(|s| s.summary.is_none() || s.summary.as_deref().unwrap_or_default().is_empty())
+            .collect();
+
+        if missing.is_empty() {
+            return (0, 0);
+        }
 
         tracing::info!(
-            "Fetch completed: {} summaries, {} errors",
-            summaries_count,
-            errors_count
+            "Backfilling summaries for {} unread stories missing summaries",
+            missing.len()
         );
-        Ok(())
+
+        generate_summaries(db, llm_client, &missing, concurrency, event_tx).await
     }
 }

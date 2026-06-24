@@ -23,15 +23,28 @@ fn marked_parse(md: &str) -> String {
 #[cfg(not(feature = "ssr"))]
 async fn copy_to_clipboard(text: &str) -> bool {
     use wasm_bindgen::prelude::*;
+    use wasm_bindgen_futures::JsFuture;
 
-    #[wasm_bindgen(
-        inline_js = "export async function writeText(t) { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } }"
-    )]
-    extern "C" {
-        fn writeText(text: &str) -> bool;
-    }
+    let window = web_sys::window().unwrap();
+    let navigator = js_sys::Reflect::get(&window, &JsValue::from_str("navigator")).ok();
+    let Some(navigator) = navigator else {
+        return false;
+    };
+    let clipboard = js_sys::Reflect::get(&navigator, &JsValue::from_str("clipboard")).ok();
+    let Some(clipboard) = clipboard else {
+        return false;
+    };
+    let write_text = js_sys::Reflect::get(&clipboard, &JsValue::from_str("writeText")).ok();
+    let Some(write_text) = write_text else {
+        return false;
+    };
 
-    writeText(text)
+    let promise = js_sys::Function::from(write_text)
+        .call1(&clipboard, &JsValue::from_str(text))
+        .ok();
+    let Some(promise) = promise else { return false };
+
+    JsFuture::from(js_sys::Promise::from(promise)).await.is_ok()
 }
 
 #[cfg(feature = "ssr")]
