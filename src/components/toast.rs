@@ -2,19 +2,19 @@ use leptos::prelude::*;
 
 #[component]
 pub fn Toast(
-    message: ReadSignal<String>,
-    toast_type: ReadSignal<String>,
-    visible: ReadSignal<bool>,
+    message: Signal<String>,
+    toast_type: Signal<String>,
+    visible: Signal<bool>,
 ) -> impl IntoView {
-    let class = move || {
-        let base = "toast";
-        let show = if visible.get() { " show" } else { "" };
-        let t = toast_type.get();
-        format!("{}{} {}", base, show, t)
-    };
-
     view! {
-        <div id="toast" class=class>
+        <div
+            id="toast"
+            class="toast"
+            class:show=move || visible.get()
+            class:success=move || toast_type.get() == "success"
+            class:error=move || toast_type.get() == "error"
+            class:loading=move || toast_type.get() == "loading"
+        >
             {move || message.get()}
         </div>
     }

@@ -294,9 +294,9 @@ pub fn HomePage() -> impl IntoView {
         />
 
         <Toast
-            message=toast_msg
-            toast_type=toast_type
-            visible=toast_visible
+            message=toast_msg.into()
+            toast_type=toast_type.into()
+            visible=toast_visible.into()
         />
     }
 }
