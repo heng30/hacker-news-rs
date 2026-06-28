@@ -57,9 +57,11 @@ pub fn StoryCard(
     story: Story,
     index: usize,
     read_stories: ReadSignal<std::collections::HashSet<i64>>,
+    favorite_stories: ReadSignal<std::collections::HashSet<i64>>,
     on_mark_read: Callback<i64>,
     on_regenerate: Callback<i64>,
     on_copy: Callback<String>,
+    on_toggle_favorite: Callback<i64>,
 ) -> impl IntoView {
     let hn_id = story.hn_id;
     let (story_sig, _) = signal(story);
@@ -114,6 +116,13 @@ pub fn StoryCard(
                         title="复制摘要"
                     >
                         <span class="icon" inner_html=move || if copied.get() { icons::COPY_CHECK } else { icons::COPY }></span>
+                    </button>
+                    <button
+                        class=move || if favorite_stories.get().contains(&hn_id) { "favorite-btn active" } else { "favorite-btn" }
+                        on:click=move |_| on_toggle_favorite.run(hn_id)
+                        title=move || if favorite_stories.get().contains(&hn_id) { "取消收藏" } else { "收藏" }
+                    >
+                        <span class="icon" inner_html=move || if favorite_stories.get().contains(&hn_id) { icons::HEART_FILLED } else { icons::HEART }></span>
                     </button>
                 </div>
             </div>

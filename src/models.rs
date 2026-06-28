@@ -98,4 +98,5 @@ pub struct UserPreferences {
     pub theme: String,
     pub show_unread: bool,
     pub read_stories: HashSet<i64>,
+    pub favorite_stories: HashSet<i64>,
 }

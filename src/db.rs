@@ -18,6 +18,7 @@ const PREFERENCES_TREE: &str = "preferences";
 const KEY_THEME: &str = "theme";
 const KEY_SHOW_UNREAD: &str = "show_unread";
 const KEY_READ_STORIES: &str = "read_stories";
+const KEY_FAVORITE_STORIES: &str = "favorite_stories";
 
 pub fn init_trees(db: &Db) -> Result<(), AppError> {
     db.open_tree(EPISODES_TREE)?;
@@ -313,4 +314,50 @@ pub fn get_show_unread(db: &Arc<Db>) -> Result<bool, AppError> {
 
 pub fn set_show_unread(db: &Arc<Db>, show: bool) -> Result<(), AppError> {
     set_preference(db, KEY_SHOW_UNREAD, &show.to_string())
+}
+
+pub fn get_favorite_stories(db: &Arc<Db>) -> Result<HashSet<i64>, AppError> {
+    match get_preference(db, KEY_FAVORITE_STORIES)? {
+        Some(json) => Ok(serde_json::from_str(&json)?),
+        None => Ok(HashSet::new()),
+    }
+}
+
+pub fn mark_story_favorite(db: &Arc<Db>, hn_id: i64) -> Result<HashSet<i64>, AppError> {
+    let mut favs = get_favorite_stories(db)?;
+    favs.insert(hn_id);
+    let json = serde_json::to_string(&favs)?;
+    set_preference(db, KEY_FAVORITE_STORIES, &json)?;
+    Ok(favs)
+}
+
+pub fn unmark_story_favorite(db: &Arc<Db>, hn_id: i64) -> Result<HashSet<i64>, AppError> {
+    let mut favs = get_favorite_stories(db)?;
+    favs.remove(&hn_id);
+    let json = serde_json::to_string(&favs)?;
+    set_preference(db, KEY_FAVORITE_STORIES, &json)?;
+    Ok(favs)
+}
+
+pub fn set_favorite_stories(db: &Arc<Db>, favs: &HashSet<i64>) -> Result<(), AppError> {
+    let json = serde_json::to_string(favs)?;
+    set_preference(db, KEY_FAVORITE_STORIES, &json)
+}
+
+pub fn get_favorite_stories_with_details(db: &Arc<Db>) -> Result<Vec<Story>, AppError> {
+    let favs = get_favorite_stories(db)?;
+    let tree = db.open_tree(STORIES_TREE)?;
+
+    let mut stories: Vec<Story> = Vec::new();
+    for item in tree.iter() {
+        let (_, data) = item?;
+        let story: Story = serde_json::from_slice(&data)?;
+        if favs.contains(&story.hn_id) {
+            stories.push(story);
+        }
+    }
+
+    // Sort by score descending
+    stories.sort_by(|a, b| b.score.cmp(&a.score));
+    Ok(stories)
 }

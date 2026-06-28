@@ -7,7 +7,10 @@ use crate::{
     server_fns::{
         episodes::{get_episode_by_date, get_episodes, get_latest_episode},
         fetch::start_fetch,
-        preferences::{get_user_preferences, mark_story_read, set_show_unread, set_theme},
+        preferences::{
+            get_user_preferences, mark_story_read, set_show_unread, set_theme,
+            toggle_story_favorite,
+        },
         stories::regenerate_summary,
     },
 };
@@ -23,6 +26,7 @@ pub fn HomePage() -> impl IntoView {
     let (is_dark, set_is_dark) = signal(false);
     let (show_only_unread, set_show_only_unread) = signal(false);
     let (read_stories, set_read_stories) = signal(HashSet::<i64>::new());
+    let (favorite_stories, set_favorite_stories) = signal(HashSet::<i64>::new());
 
     let prefs_resource = Resource::new(
         || (),
@@ -35,6 +39,7 @@ pub fn HomePage() -> impl IntoView {
             set_is_dark.set(is_dark_new);
             set_show_only_unread.set(prefs.show_unread);
             set_read_stories.set(prefs.read_stories);
+            set_favorite_stories.set(prefs.favorite_stories);
 
             if !is_server()
                 && is_dark_new
@@ -173,6 +178,15 @@ pub fn HomePage() -> impl IntoView {
         show_toast(msg, "success".to_string());
     };
 
+    let toggle_favorite = move |hn_id: i64| {
+        spawn_local(async move {
+            match toggle_story_favorite(hn_id).await {
+                Ok(updated) => set_favorite_stories.set(updated),
+                Err(e) => show_toast(format!("错误: {}", e), "error".to_string()),
+            }
+        });
+    };
+
     let display_stories = move || {
         let stories = stories_signal.get();
         let reads = read_stories.get();
@@ -214,6 +228,11 @@ pub fn HomePage() -> impl IntoView {
                 });
             })
             on_calendar=Callback::new(move |_| set_calendar_open.set(true))
+            on_favorites=Callback::new(move |_| {
+                if !is_server() && let Some(window) = web_sys::window() {
+                        _ = window.location().set_href("/favorites");
+                }
+            })
             on_toggle_theme=Callback::new(move |_| toggle_theme())
             on_settings=Callback::new(move |_| set_settings_open.set(true))
             is_dark=is_dark
@@ -256,9 +275,11 @@ pub fn HomePage() -> impl IntoView {
                                                         story=story
                                                         index=idx
                                                         read_stories=read_stories
+                                                        favorite_stories=favorite_stories
                                                         on_mark_read=Callback::new(move |id| mark_read(id))
                                                         on_regenerate=Callback::new(move |id| do_regenerate(id))
                                                         on_copy=Callback::new(move |msg| do_copy(msg))
+                                                        on_toggle_favorite=Callback::new(move |id| toggle_favorite(id))
                                                     />
                                                 }
                                             }
