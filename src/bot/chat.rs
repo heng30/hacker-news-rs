@@ -139,101 +139,151 @@ async fn handle_stream_response(
     response: reqwest::Response,
     chat_tx: mpsc::Sender<response::StreamTextItem>,
 ) -> Result<(), Error> {
+    let mut buffer: Vec<u8> = Vec::new();
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
 
     loop {
         match stream.next().await {
             Some(Ok(chunk)) => {
-                buffer.push_str(&String::from_utf8_lossy(&chunk));
+                buffer.extend_from_slice(&chunk);
 
-                while let Some(event_end) = buffer.find("\n\n") {
-                    let event = buffer[..event_end].to_string();
-                    buffer = buffer[event_end + 2..].to_string();
-
-                    if event.is_empty() {
-                        continue;
-                    }
-
-                    if event == "data: [DONE]" {
-                        break;
-                    }
-
-                    if !event.starts_with("data:") {
-                        continue;
-                    }
-
-                    let json_str = &event[5..];
-
-                    if let Ok(err) = serde_json::from_str::<response::Error>(json_str) {
-                        if let Some(estr) = err.error.get("message") {
-                            let item = response::StreamTextItem {
-                                etext: Some(estr.clone()),
-                                ..Default::default()
-                            };
-                            if chat_tx.send(item).await.is_err() {
-                                log::info!("receiver dropped");
-                                return Ok(());
-                            }
-                            log::error!("API error: {}", estr);
+                while let Some((sep, sep_len)) = find_event_separator(&buffer) {
+                    // A UTF-8 char split across network chunks can only be
+                    // incomplete at the buffer tail (after the last event
+                    // separator), so a complete event always decodes intact.
+                    let event = match std::str::from_utf8(&buffer[..sep]) {
+                        Ok(e) => e.to_string(),
+                        Err(_) => {
+                            log::error!("SSE event is not valid UTF-8, skipping");
+                            buffer.drain(..sep + sep_len);
+                            continue;
                         }
+                    };
+                    buffer.drain(..sep + sep_len);
+
+                    if handle_event(&chat_tx, &event).await? {
                         return Ok(());
-                    }
-
-                    match serde_json::from_str::<response::ChatCompletionChunk>(json_str) {
-                        Ok(chunk) => {
-                            if chunk.choices.is_empty() {
-                                continue;
-                            }
-                            let choice = &chunk.choices[0];
-                            if choice.finish_reason.is_some() {
-                                let item = response::StreamTextItem {
-                                    finished: true,
-                                    ..Default::default()
-                                };
-                                if chat_tx.send(item).await.is_err() {
-                                    log::info!("receiver dropped");
-                                    return Ok(());
-                                }
-                                return Ok(());
-                            }
-
-                            let item = if choice.delta.contains_key("content")
-                                && choice.delta["content"].is_some()
-                            {
-                                Some(response::StreamTextItem {
-                                    text: choice.delta["content"].clone(),
-                                    ..Default::default()
-                                })
-                            } else if choice.delta.contains_key("reasoning_content")
-                                && choice.delta["reasoning_content"].is_some()
-                            {
-                                Some(response::StreamTextItem {
-                                    reasoning_text: choice.delta["reasoning_content"].clone(),
-                                    ..Default::default()
-                                })
-                            } else if choice.delta.contains_key("role") {
-                                None
-                            } else {
-                                None
-                            };
-
-                            if let Some(item) = item
-                                && chat_tx.send(item).await.is_err()
-                            {
-                                log::info!("receiver dropped");
-                                return Ok(());
-                            }
-                        }
-                        Err(e) => log::error!("Parse error: {:?} event={}", e, &event),
                     }
                 }
             }
             Some(Err(e)) => log::error!("Stream error: {:?}", e),
-            None => break,
+            None => {
+                // Provider closed the stream without a [DONE] marker: flush a
+                // trailing event that had no blank-line terminator.
+                if !buffer.is_empty()
+                    && let Ok(event) = std::str::from_utf8(&buffer)
+                    && handle_event(&chat_tx, event).await?
+                {
+                    return Ok(());
+                }
+                break;
+            }
         }
     }
     Ok(())
+}
+
+/// Locate the next SSE event separator (`\n\n` or `\r\n\r\n`) and return
+/// (end of the event content, length of the separator). `\n` never occurs
+/// inside a multi-byte UTF-8 sequence, so searching raw bytes is safe.
+fn find_event_separator(buf: &[u8]) -> Option<(usize, usize)> {
+    if let Some(pos) = buf.windows(2).position(|w| w == b"\n\n") {
+        Some((pos, 2))
+    } else if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+        Some((pos, 4))
+    } else {
+        None
+    }
+}
+
+/// Parse and forward a single SSE event. Returns `Ok(true)` when the stream
+/// should stop after this event (`[DONE]`, API error, finish reason, or the
+/// receiver being dropped).
+async fn handle_event(
+    tx: &mpsc::Sender<response::StreamTextItem>,
+    raw_event: &str,
+) -> Result<bool, Error> {
+    // A trailing newline can survive on the no-blank-line flush path; strip
+    // both `\r` and `\n` so LF/CRLF framings behave identically (e.g. [DONE]).
+    let event = raw_event.trim_end_matches(['\r', '\n']);
+
+    if event.is_empty() {
+        return Ok(false);
+    }
+
+    if event == "data: [DONE]" {
+        return Ok(true);
+    }
+
+    if !event.starts_with("data:") {
+        return Ok(false);
+    }
+
+    let json_str = &event[5..];
+
+    if let Ok(err) = serde_json::from_str::<response::Error>(json_str) {
+        if let Some(estr) = err.error.get("message") {
+            let item = response::StreamTextItem {
+                etext: Some(estr.clone()),
+                ..Default::default()
+            };
+            if tx.send(item).await.is_err() {
+                log::info!("receiver dropped");
+                return Ok(true);
+            }
+            log::error!("API error: {}", estr);
+        }
+        return Ok(true);
+    }
+
+    match serde_json::from_str::<response::ChatCompletionChunk>(json_str) {
+        Ok(chunk) => {
+            if chunk.choices.is_empty() {
+                return Ok(false);
+            }
+            let choice = &chunk.choices[0];
+            if choice.finish_reason.is_some() {
+                let item = response::StreamTextItem {
+                    finished: true,
+                    ..Default::default()
+                };
+                if tx.send(item).await.is_err() {
+                    log::info!("receiver dropped");
+                    return Ok(true);
+                }
+                return Ok(true);
+            }
+
+            let item = if choice.delta.contains_key("content") && choice.delta["content"].is_some()
+            {
+                Some(response::StreamTextItem {
+                    text: choice.delta["content"].clone(),
+                    ..Default::default()
+                })
+            } else if choice.delta.contains_key("reasoning_content")
+                && choice.delta["reasoning_content"].is_some()
+            {
+                Some(response::StreamTextItem {
+                    reasoning_text: choice.delta["reasoning_content"].clone(),
+                    ..Default::default()
+                })
+            } else {
+                None
+            };
+
+            if let Some(item) = item
+                && tx.send(item).await.is_err()
+            {
+                log::info!("receiver dropped");
+                return Ok(true);
+            }
+            Ok(false)
+        }
+        Err(e) => {
+            log::error!("Parse error: {:?} event={}", e, event);
+            Ok(false)
+        }
+    }
 }
 
 async fn handle_non_stream_response(
@@ -287,4 +337,52 @@ async fn handle_non_stream_response(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_separator_lf_and_crlf() {
+        assert_eq!(find_event_separator(b"data: x\n\nmore"), Some((7, 2)));
+        assert_eq!(find_event_separator(b"data: x\r\n\r\nmore"), Some((7, 4)));
+        // Mid-event bytes (e.g. a split multi-byte char) are not a separator
+        assert_eq!(find_event_separator(b"data: \xE4\xBD"), None);
+        assert_eq!(find_event_separator(b"data: x"), None);
+    }
+
+    #[tokio::test]
+    async fn split_utf8_char_across_chunks_reassembles() {
+        let (tx, mut rx) = mpsc::channel(16);
+        let mut buffer: Vec<u8> = Vec::new();
+
+        // 你 = U+4F60 → E4 BD A0 in UTF-8. Cut the byte stream between the
+        // second and third byte of 你, as a TCP segment boundary would.
+        let event = format!(
+            "data: {}\n\n",
+            r#"{"choices":[{"delta":{"content":"你好"}}]}"#
+        );
+        let bytes = event.as_bytes();
+        let split = event.find("你").unwrap() + 2;
+
+        // First chunk leaves a partial multi-byte char in the buffer; it must
+        // stay raw bytes — no separator found, nothing lossy-decoded yet.
+        buffer.extend_from_slice(&bytes[..split]);
+        assert_eq!(find_event_separator(&buffer), None);
+
+        // Second chunk completes the char and the event framing.
+        buffer.extend_from_slice(&bytes[split..]);
+
+        while let Some((sep, sep_len)) = find_event_separator(&buffer) {
+            let event = std::str::from_utf8(&buffer[..sep]).unwrap().to_string();
+            buffer.drain(..sep + sep_len);
+            assert!(!handle_event(&tx, &event).await.unwrap());
+        }
+
+        let item = rx.recv().await.unwrap();
+        assert_eq!(item.text.as_deref(), Some("你好"));
+        assert!(!item.finished);
+        assert!(buffer.is_empty());
+    }
 }
